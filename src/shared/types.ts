@@ -39,12 +39,21 @@ export interface ChatMessage {
 
 export type AgentMode = 'chat' | 'code'
 
+export interface ProjectRecord {
+  id: string
+  path: string
+  name: string
+  createdAt: number
+  lastActivityAt: number
+}
+
 export interface ChatRequest {
   conversationId: string
   messages: Array<{ role: Role; content: string; toolCalls?: ToolCall[] }>
   model: string
   enableTools: boolean
   mode: AgentMode
+  workspacePath?: string
 }
 
 export interface WorkspaceInfo {
@@ -121,4 +130,3 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
 ]
 
 export const DEFAULT_MODEL = 'mlx-community/gemma-4-e4b-it-4bit'
-

@@ -2,18 +2,37 @@ import { app } from 'electron'
 import { createServer, type Server } from 'http'
 import { createReadStream } from 'fs'
 import { mkdir, readFile, writeFile, readdir, stat, access, rm, rename } from 'fs/promises'
-import { join, resolve, dirname, extname, relative, sep } from 'path'
+import { join, resolve, dirname, extname, relative, sep, isAbsolute } from 'path'
 import { spawn } from 'child_process'
 
 let server: Server | null = null
 let serverPort = 0
+const conversationWorkspaceRoots = new Map<string, string>()
 
 export function workspacesRoot(): string {
   return join(app.getPath('userData'), 'workspaces')
 }
 
 export function workspaceDir(conversationId: string): string {
+  const registered = conversationWorkspaceRoots.get(sanitizeId(conversationId))
+  if (registered) return registered
   return join(workspacesRoot(), sanitizeId(conversationId))
+}
+
+export function registerConversationWorkspace(
+  conversationId: string,
+  workspacePath?: string
+): void {
+  const key = sanitizeId(conversationId)
+  if (!workspacePath) {
+    conversationWorkspaceRoots.delete(key)
+    return
+  }
+  const resolved = resolve(workspacePath)
+  if (!isAbsolute(resolved)) {
+    throw new Error(`Workspace path must be absolute: ${workspacePath}`)
+  }
+  conversationWorkspaceRoots.set(key, resolved)
 }
 
 function sanitizeId(id: string): string {

@@ -22,6 +22,9 @@ const api = {
 
   listLocalModels: (): Promise<string[]> => ipcRenderer.invoke('models:list-local'),
 
+  selectProjectFolder: (): Promise<string | null> =>
+    ipcRenderer.invoke('project:select-folder'),
+
   sendChat: async (req: ChatRequest, onChunk: (c: StreamChunk) => void): Promise<void> => {
     const { channel } = (await ipcRenderer.invoke('chat:send', req)) as { channel: string }
     return new Promise((resolve) => {
@@ -42,14 +45,14 @@ const api = {
   listTools: (): Promise<Array<{ name: string; description: string; mode: string }>> =>
     ipcRenderer.invoke('tools:list'),
 
-  getWorkspace: (conversationId: string): Promise<WorkspaceInfo> =>
-    ipcRenderer.invoke('workspace:info', conversationId),
+  getWorkspace: (conversationId: string, workspacePath?: string): Promise<WorkspaceInfo> =>
+    ipcRenderer.invoke('workspace:info', { conversationId, workspacePath }),
 
-  listWorkspace: (conversationId: string): Promise<WorkspaceFile[]> =>
-    ipcRenderer.invoke('workspace:list', conversationId),
+  listWorkspace: (conversationId: string, workspacePath?: string): Promise<WorkspaceFile[]> =>
+    ipcRenderer.invoke('workspace:list', { conversationId, workspacePath }),
 
-  openWorkspace: (conversationId: string): Promise<void> =>
-    ipcRenderer.invoke('workspace:open-external', conversationId),
+  openWorkspace: (conversationId: string, workspacePath?: string): Promise<void> =>
+    ipcRenderer.invoke('workspace:open-external', { conversationId, workspacePath }),
 
   workspaceServerPort: (): Promise<number> => ipcRenderer.invoke('workspace:server-port'),
 

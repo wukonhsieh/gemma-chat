@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, nativeTheme, session, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, nativeTheme, session, nativeImage, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { AVAILABLE_MODELS } from '@shared/types'
@@ -29,7 +29,8 @@ import {
   previewUrl,
   listTree,
   workspaceDir,
-  wsWriteFile
+  wsWriteFile,
+  registerConversationWorkspace
 } from './workspace'
 import type { ChatRequest, StreamChunk, ToolCall } from '../shared/types'
 
@@ -153,6 +154,7 @@ function actionTarget(_name: string, args: Record<string, unknown>): string | un
 async function handleChat(req: ChatRequest, channel: string): Promise<void> {
   const abort = new AbortController()
   chatAbortControllers.set(req.conversationId, abort)
+  registerConversationWorkspace(req.conversationId, req.workspacePath)
 
   const emit = (chunk: StreamChunk): void => send(channel, chunk)
 
@@ -512,6 +514,18 @@ app.whenReady().then(async () => {
     return listLocalModels()
   })
 
+  ipcMain.handle('project:select-folder', async () => {
+    const options: Electron.OpenDialogOptions = {
+      properties: ['openDirectory', 'createDirectory'],
+      buttonLabel: 'Use as Project'
+    }
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
   ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
     const channel = `chat:stream:${req.conversationId}`
     handleChat(req, channel).catch((err) => console.error('chat handler error', err))
@@ -531,24 +545,36 @@ app.whenReady().then(async () => {
     }))
   })
 
-  ipcMain.handle('workspace:info', async (_e, conversationId: string) => {
-    await ensureWorkspace(conversationId)
-    return {
-      conversationId,
-      path: workspaceDir(conversationId),
-      previewUrl: previewUrl(conversationId)
+  ipcMain.handle(
+    'workspace:info',
+    async (_e, req: { conversationId: string; workspacePath?: string }) => {
+      registerConversationWorkspace(req.conversationId, req.workspacePath)
+      await ensureWorkspace(req.conversationId)
+      return {
+        conversationId: req.conversationId,
+        path: workspaceDir(req.conversationId),
+        previewUrl: previewUrl(req.conversationId)
+      }
     }
-  })
+  )
 
-  ipcMain.handle('workspace:list', async (_e, conversationId: string) => {
-    const base = await ensureWorkspace(conversationId)
-    return listTree(base, 300)
-  })
+  ipcMain.handle(
+    'workspace:list',
+    async (_e, req: { conversationId: string; workspacePath?: string }) => {
+      registerConversationWorkspace(req.conversationId, req.workspacePath)
+      const base = await ensureWorkspace(req.conversationId)
+      return listTree(base, 300)
+    }
+  )
 
-  ipcMain.handle('workspace:open-external', async (_e, conversationId: string) => {
-    await ensureWorkspace(conversationId)
-    shell.openPath(workspaceDir(conversationId))
-  })
+  ipcMain.handle(
+    'workspace:open-external',
+    async (_e, req: { conversationId: string; workspacePath?: string }) => {
+      registerConversationWorkspace(req.conversationId, req.workspacePath)
+      await ensureWorkspace(req.conversationId)
+      shell.openPath(workspaceDir(req.conversationId))
+    }
+  )
 
   ipcMain.handle('workspace:server-port', async () => getWorkspaceServerPort())
 
