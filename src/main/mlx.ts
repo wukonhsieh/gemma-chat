@@ -36,21 +36,27 @@ function modelsDir(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Find a compatible system Python (3.10–3.13).
- * We explicitly skip 3.14+ because mlx-lm doesn't publish wheels for it yet.
+ * Find a compatible system Python (3.10–3.14).
  * We try versioned binaries first (most reliable), then fall back to `python3`.
  */
 function findSystemPython(): string | null {
   // Prefer specific known-good versions, newest first
   const versionedCandidates = [
+    '/opt/homebrew/Caskroom/miniforge/base/envs/env_314/bin/python',
+    '/opt/homebrew/Caskroom/miniforge/base/envs/env_314/bin/python3',
+    '/opt/homebrew/bin/python3.14',
+    '/opt/homebrew/opt/python@3.14/bin/python3.14',
+    '/usr/local/bin/python3.14',
     '/opt/homebrew/bin/python3.13',
     '/opt/homebrew/bin/python3.12',
     '/opt/homebrew/bin/python3.11',
     '/opt/homebrew/bin/python3.10',
     '/opt/homebrew/opt/python@3.13/bin/python3.13',
+    '/opt/homebrew/opt/python@3.14/bin/python3.14',
     '/opt/homebrew/opt/python@3.12/bin/python3.12',
     '/opt/homebrew/opt/python@3.11/bin/python3.11',
     '/opt/homebrew/opt/python@3.10/bin/python3.10',
+    '/usr/local/bin/python3.14',
     '/usr/local/bin/python3.13',
     '/usr/local/bin/python3.12',
     '/usr/local/bin/python3.11',
@@ -69,7 +75,7 @@ function findSystemPython(): string | null {
     }
   }
 
-  // Last resort: try generic python3 but verify it's not 3.14+
+  // Last resort: try generic python3 but verify it's in the supported range.
   const fallbacks = ['/opt/homebrew/bin/python3', '/usr/local/bin/python3', '/usr/bin/python3']
   for (const c of fallbacks) {
     try {
@@ -78,7 +84,7 @@ function findSystemPython(): string | null {
         const ver = s.stdout.toString().trim() // e.g. "Python 3.13.2"
         const match = ver.match(/Python 3\.(\d+)/)
         const minor = match ? parseInt(match[1], 10) : 99
-        if (minor >= 10 && minor <= 13) {
+        if (minor >= 10 && minor <= 14) {
           console.log(`[mlx] Found compatible Python: ${c} (${ver})`)
           return c
         } else if (minor < 10) {
@@ -178,7 +184,7 @@ export async function installMLX(
   const sysPython = findSystemPython()
   if (!sysPython) {
     throw new Error(
-      'Python 3.10–3.13 not found. Please install Python via Homebrew: brew install python@3.13'
+      'Python 3.10–3.14 not found. Please install Python via Homebrew or Miniforge.'
     )
   }
 

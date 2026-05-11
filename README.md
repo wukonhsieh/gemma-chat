@@ -51,7 +51,7 @@ Everything happens locally. The model runs via [MLX-LM](https://github.com/ml-ex
 
 ## Getting Started
 
-**Requirements:** macOS on Apple Silicon, Python 3.10–3.13, Node 20+.
+**Requirements:** macOS on Apple Silicon, Python 3.10–3.14, Node 20+.
 
 ```bash
 git clone https://github.com/ammaarreshi/gemma-chat-public.git
@@ -62,7 +62,7 @@ npm run dev
 
 First launch will auto-detect Python → create a venv → install MLX-LM → download the model (~3 GB) → ready to vibe code.
 
-> **Tip:** Install Python via Homebrew if you don't have it: `brew install python@3.13`
+> **Tip:** Install Python via Homebrew if you don't have it, or point the app at a Miniforge Python 3.14 env such as `/opt/homebrew/Caskroom/miniforge/base/envs/env_314/bin/python`.
 
 ### Building a Distributable
 
