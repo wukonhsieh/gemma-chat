@@ -1,3 +1,5 @@
+import type { ProjectRecord } from '@shared/types'
+
 interface Conversation {
   id: string
   title: string
@@ -5,24 +7,97 @@ interface Conversation {
 }
 
 interface Props {
+  projects: ProjectRecord[]
+  activeProjectId: string | null
   conversations: Conversation[]
   activeId: string
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
+  onAddProject: () => void
+  onSelectProject: (id: string | null) => void
+  onDeleteProject: (id: string) => void
 }
 
 export default function Sidebar({
+  projects,
+  activeProjectId,
   conversations,
   activeId,
   onSelect,
   onNew,
-  onDelete
+  onDelete,
+  onAddProject,
+  onSelectProject,
+  onDeleteProject
 }: Props) {
   return (
     <div className="drag flex h-full w-60 shrink-0 flex-col border-r border-white/[0.06] bg-black/20">
       <div className="h-11 shrink-0" />
-      <div className="no-drag px-3 pb-3">
+      <div className="no-drag space-y-3 px-3 pb-3">
+        <div>
+          <div className="mb-1.5 flex items-center justify-between px-1">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-ink-400">
+              Projects
+            </span>
+            <button
+              title="Add project"
+              onClick={onAddProject}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-ink-400 transition hover:bg-white/10 hover:text-white"
+            >
+              <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+          <div className="max-h-40 space-y-1 overflow-y-auto pr-0.5">
+            {projects.length === 0 ? (
+              <button
+                title="Using the app default workspace"
+                onClick={() => onSelectProject(null)}
+                className="w-full rounded-lg bg-white/[0.04] px-3 py-2 text-left text-[12.5px] text-white"
+              >
+                <div className="truncate font-medium">Default workspace</div>
+                <div className="mt-0.5 truncate text-[11px] text-ink-400">
+                  Add a project folder
+                </div>
+              </button>
+            ) : (
+              projects.map((project) => (
+                <div key={project.id} className="group/project relative">
+                  <button
+                    title={project.path}
+                    onClick={() => onSelectProject(project.id)}
+                    className={`w-full rounded-lg px-3 py-2 pr-8 text-left transition-all duration-200 ease-out ${
+                      activeProjectId === project.id
+                        ? 'bg-white/[0.08] text-white'
+                        : 'text-ink-200 hover:bg-white/[0.04]'
+                    }`}
+                  >
+                    <div className="truncate text-[12.5px] font-medium">{project.name}</div>
+                    <div className="mt-0.5 truncate text-[10.5px] text-ink-400">
+                      {project.path}
+                    </div>
+                  </button>
+                  <button
+                    title="Delete project record"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (confirm('Delete this project record and its chats? Files in the folder will stay untouched.')) {
+                        onDeleteProject(project.id)
+                      }
+                    }}
+                    className="absolute right-1.5 top-2 hidden h-6 w-6 items-center justify-center rounded-md text-ink-400 hover:bg-white/10 hover:text-white group-hover/project:flex"
+                  >
+                    <svg viewBox="0 0 16 16" className="h-3 w-3" fill="currentColor">
+                      <path d="M4 4l8 8M12 4L4 12" stroke="currentColor" strokeWidth="1.5" />
+                    </svg>
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
         <button
           onClick={onNew}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[13px] font-medium text-white transition hover:border-white/20 hover:bg-white/[0.07]"
@@ -32,6 +107,9 @@ export default function Sidebar({
           </svg>
           New chat
         </button>
+      </div>
+      <div className="no-drag px-3 pb-2 text-[10px] font-medium uppercase tracking-wider text-ink-400">
+        Chats
       </div>
       <div className="no-drag min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {conversations.map((c) => (

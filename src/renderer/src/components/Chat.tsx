@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AVAILABLE_MODELS, type AgentMode, type ChatMessage, type ToolCall, type StreamChunk } from '@shared/types'
+import {
+  AVAILABLE_MODELS,
+  type AgentMode,
+  type ChatMessage,
+  type ProjectRecord,
+  type ToolCall,
+  type StreamChunk
+} from '@shared/types'
 import gemmaLogoUrl from '../assets/gemma-logo.png'
 import Composer from './Composer'
 import Message from './Message'
@@ -16,39 +23,119 @@ interface Conversation {
   title: string
   messages: ChatMessage[]
   createdAt: number
+  updatedAt: number
   mode: AgentMode
   canvasOpen?: boolean
+  projectId?: string
+  projectPath?: string
 }
 
-const STORAGE_KEY = 'gemma-chat:conversations:v2'
+interface ChatState {
+  conversations: Conversation[]
+  projects: ProjectRecord[]
+  activeProjectId: string | null
+}
 
-function loadConversations(): Conversation[] {
+const STATE_KEY = 'gemma-chat:state:v3'
+const LEGACY_CONVERSATIONS_KEY = 'gemma-chat:conversations:v2'
+
+function loadChatState(): ChatState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const arr = JSON.parse(raw) as Conversation[]
-    return arr.map((c) => ({ ...c, mode: c.mode ?? 'code' }))
+    const raw = localStorage.getItem(STATE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ChatState>
+      const projects = normalizeProjects(parsed.projects)
+      const activeProjectId = projects.some((p) => p.id === parsed.activeProjectId)
+        ? parsed.activeProjectId!
+        : projects[0]?.id ?? null
+      return {
+        conversations: normalizeConversations(parsed.conversations),
+        projects,
+        activeProjectId
+      }
+    }
+
+    const legacyRaw = localStorage.getItem(LEGACY_CONVERSATIONS_KEY)
+    if (!legacyRaw) return emptyChatState()
+    return {
+      conversations: normalizeConversations(JSON.parse(legacyRaw) as Conversation[]),
+      projects: [],
+      activeProjectId: null
+    }
   } catch {
-    return []
+    return emptyChatState()
   }
 }
 
-function saveConversations(cs: Conversation[]): void {
+function saveChatState(state: ChatState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cs))
+    localStorage.setItem(STATE_KEY, JSON.stringify(state))
   } catch {
     // ignore
   }
 }
 
-function newConversation(mode: AgentMode = 'code'): Conversation {
+function emptyChatState(): ChatState {
   return {
-    id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    conversations: [newConversation()],
+    projects: [],
+    activeProjectId: null
+  }
+}
+
+function normalizeConversations(value: unknown): Conversation[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((c): c is Partial<Conversation> => !!c && typeof c === 'object')
+    .map((c) => ({
+      id: typeof c.id === 'string' ? c.id : newId('c'),
+      title: typeof c.title === 'string' ? c.title : 'New chat',
+      messages: Array.isArray(c.messages) ? c.messages : [],
+      createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now(),
+      updatedAt:
+        typeof c.updatedAt === 'number'
+          ? c.updatedAt
+          : typeof c.createdAt === 'number'
+            ? c.createdAt
+            : Date.now(),
+      mode: c.mode ?? 'code',
+      canvasOpen: c.canvasOpen ?? c.mode === 'code',
+      projectId: typeof c.projectId === 'string' ? c.projectId : undefined,
+      projectPath: typeof c.projectPath === 'string' ? c.projectPath : undefined
+    }))
+}
+
+function normalizeProjects(value: unknown): ProjectRecord[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((p): p is Partial<ProjectRecord> => !!p && typeof p === 'object')
+    .filter((p) => typeof p.id === 'string' && typeof p.path === 'string')
+    .map((p) => ({
+      id: p.id!,
+      path: p.path!,
+      name: typeof p.name === 'string' && p.name ? p.name : projectNameFromPath(p.path!),
+      createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
+      lastActivityAt:
+        typeof p.lastActivityAt === 'number'
+          ? p.lastActivityAt
+          : typeof p.createdAt === 'number'
+            ? p.createdAt
+            : Date.now()
+    }))
+}
+
+function newConversation(mode: AgentMode = 'code', project?: ProjectRecord): Conversation {
+  const now = Date.now()
+  return {
+    id: newId('c'),
     title: 'New chat',
     messages: [],
-    createdAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
     mode,
-    canvasOpen: mode === 'code'
+    canvasOpen: mode === 'code',
+    projectId: project?.id,
+    projectPath: project?.path
   }
 }
 
@@ -56,44 +143,162 @@ function newId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+function projectNameFromPath(path: string): string {
+  const normalized = path.replace(/[\\/]+$/, '')
+  return normalized.split(/[\\/]/).pop() || path
+}
+
+function touchProject(
+  projects: ProjectRecord[],
+  projectId: string | undefined,
+  timestamp: number
+): ProjectRecord[] {
+  if (!projectId) return projects
+  return projects.map((p) =>
+    p.id === projectId ? { ...p, lastActivityAt: timestamp } : p
+  )
+}
+
 export default function Chat({ model, onSwitchModel }: Props) {
-  const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const loaded = loadConversations()
-    return loaded.length ? loaded : [newConversation()]
+  let initialActiveId = ''
+  const [chatState, setChatState] = useState<ChatState>(() => {
+    const loaded = loadChatState()
+    const conversations = loaded.conversations.length ? loaded.conversations : [newConversation()]
+    initialActiveId = conversations[0].id
+    return { ...loaded, conversations }
   })
-  const [activeId, setActiveId] = useState<string>(() => conversations[0].id)
+  const { conversations, projects, activeProjectId } = chatState
+  const [activeId, setActiveId] = useState<string>(() => initialActiveId)
   const [streaming, setStreaming] = useState(false)
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
 
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId),
+    [projects, activeProjectId]
+  )
+
+  const sortedProjects = useMemo(
+    () => [...projects].sort((a, b) => b.lastActivityAt - a.lastActivityAt),
+    [projects]
+  )
+
+  const visibleConversations = useMemo(
+    () =>
+      conversations.filter((c) =>
+        activeProjectId ? c.projectId === activeProjectId : !c.projectId
+      ),
+    [conversations, activeProjectId]
+  )
+
   const activeConversation = useMemo(
-    () => conversations.find((c) => c.id === activeId) ?? conversations[0],
-    [conversations, activeId]
+    () =>
+      visibleConversations.find((c) => c.id === activeId) ??
+      visibleConversations[0] ??
+      conversations[0],
+    [conversations, visibleConversations, activeId]
   )
 
   useEffect(() => {
-    saveConversations(conversations)
-  }, [conversations])
+    saveChatState(chatState)
+  }, [chatState])
+
+  useEffect(() => {
+    const project = activeProject
+    const matching = conversations.filter((c) =>
+      activeProjectId ? c.projectId === activeProjectId : !c.projectId
+    )
+    if (matching.length === 0) {
+      const c = newConversation(activeConversation?.mode ?? 'code', project)
+      setChatState((state) => ({ ...state, conversations: [c, ...state.conversations] }))
+      setActiveId(c.id)
+      return
+    }
+    if (!matching.some((c) => c.id === activeId)) {
+      setActiveId(matching[0].id)
+    }
+  }, [activeProject, activeProjectId, activeId, activeConversation?.mode, conversations])
 
   function updateActive(fn: (c: Conversation) => Conversation): void {
-    setConversations((cs) => cs.map((c) => (c.id === activeId ? fn(c) : c)))
+    setChatState((state) => ({
+      ...state,
+      conversations: state.conversations.map((c) => (c.id === activeId ? fn(c) : c))
+    }))
   }
 
   function createConversation(mode: AgentMode = 'code'): void {
-    const c = newConversation(mode)
-    setConversations((cs) => [c, ...cs])
+    const c = newConversation(mode, activeProject)
+    setChatState((state) => ({
+      ...state,
+      conversations: [c, ...state.conversations],
+      projects: touchProject(state.projects, activeProject?.id, c.createdAt)
+    }))
     setActiveId(c.id)
   }
 
   function deleteConversation(id: string): void {
-    setConversations((cs) => {
-      const filtered = cs.filter((c) => c.id !== id)
-      if (filtered.length === 0) {
-        const nc = newConversation()
+    setChatState((state) => {
+      const filtered = state.conversations.filter((c) => c.id !== id)
+      const visible = filtered.filter((c) =>
+        state.activeProjectId ? c.projectId === state.activeProjectId : !c.projectId
+      )
+      if (visible.length === 0) {
+        const project = state.projects.find((p) => p.id === state.activeProjectId)
+        const nc = newConversation(activeConversation?.mode ?? 'code', project)
         setActiveId(nc.id)
-        return [nc]
+        return { ...state, conversations: [nc, ...filtered] }
       }
-      if (id === activeId) setActiveId(filtered[0].id)
-      return filtered
+      if (id === activeId) setActiveId(visible[0].id)
+      return { ...state, conversations: filtered }
+    })
+  }
+
+  async function addProject(): Promise<void> {
+    const path = await window.api.selectProjectFolder()
+    if (!path) return
+    const existing = projects.find((p) => p.path === path)
+    if (existing) {
+      selectProject(existing.id)
+      return
+    }
+    const now = Date.now()
+    const project: ProjectRecord = {
+      id: newId('p'),
+      path,
+      name: projectNameFromPath(path),
+      createdAt: now,
+      lastActivityAt: now
+    }
+    const c = newConversation(activeConversation?.mode ?? 'code', project)
+    setChatState((state) => ({
+      conversations: [c, ...state.conversations],
+      projects: [project, ...state.projects],
+      activeProjectId: project.id
+    }))
+    setActiveId(c.id)
+  }
+
+  function selectProject(projectId: string | null): void {
+    setChatState((state) => ({ ...state, activeProjectId: projectId }))
+  }
+
+  function deleteProject(projectId: string): void {
+    setChatState((state) => {
+      const projects = state.projects.filter((p) => p.id !== projectId)
+      const conversations = state.conversations.filter((c) => c.projectId !== projectId)
+      const nextProjectId =
+        state.activeProjectId === projectId
+          ? [...projects].sort((a, b) => b.lastActivityAt - a.lastActivityAt)[0]?.id ?? null
+          : state.activeProjectId
+      const nextConversations =
+        projects.length === 0 && !conversations.some((c) => !c.projectId)
+          ? [newConversation(), ...conversations]
+          : conversations
+      setActiveId(nextConversations[0]?.id ?? '')
+      return {
+        conversations: nextConversations,
+        projects,
+        activeProjectId: nextProjectId
+      }
     })
   }
 
@@ -109,32 +314,46 @@ export default function Chat({ model, onSwitchModel }: Props) {
   }
 
   async function handleSend(input: string): Promise<void> {
-    if (!input.trim() || streaming) return
+    if (!input.trim() || streaming || !activeConversation) return
 
-    const conv = conversations.find((c) => c.id === activeId)!
+    const conv = conversations.find((c) => c.id === activeId) ?? activeConversation
+    const now = Date.now()
 
     const userMsg: ChatMessage = {
       id: newId('m'),
       role: 'user',
       content: input,
-      createdAt: Date.now()
+      createdAt: now
     }
     const assistantMsg: ChatMessage = {
       id: newId('m'),
       role: 'assistant',
       content: '',
-      createdAt: Date.now(),
+      createdAt: now,
       model,
       toolCalls: [],
       activity: { kind: 'thinking' }
     }
 
-    updateActive((c) => {
-      const title =
-        c.messages.length === 0
-          ? input.slice(0, 48) + (input.length > 48 ? '…' : '')
-          : c.title
-      return { ...c, title, messages: [...c.messages, userMsg, assistantMsg] }
+    setChatState((state) => {
+      const conversations = state.conversations.map((c) => {
+        if (c.id !== activeId) return c
+        const title =
+          c.messages.length === 0
+            ? input.slice(0, 48) + (input.length > 48 ? '…' : '')
+            : c.title
+        return {
+          ...c,
+          title,
+          updatedAt: now,
+          messages: [...c.messages, userMsg, assistantMsg]
+        }
+      })
+      return {
+        ...state,
+        conversations,
+        projects: touchProject(state.projects, conv.projectId, now)
+      }
     })
 
     const history = [...conv.messages, userMsg].map((m) => ({
@@ -157,8 +376,9 @@ export default function Chat({ model, onSwitchModel }: Props) {
         },
         (chunk: StreamChunk) => {
           if (streamRef.current.abort) return
-          setConversations((cs) =>
-            cs.map((c) => {
+          setChatState((state) => ({
+            ...state,
+            conversations: state.conversations.map((c) => {
               if (c.id !== activeId) return c
               const msgs = [...c.messages]
               const last = msgs[msgs.length - 1]
@@ -193,7 +413,7 @@ export default function Chat({ model, onSwitchModel }: Props) {
               }
               return { ...c, messages: msgs }
             })
-          )
+          }))
         }
       )
     } finally {
@@ -230,11 +450,16 @@ export default function Chat({ model, onSwitchModel }: Props) {
   return (
     <div className="flex h-full w-full">
       <Sidebar
-        conversations={conversations}
+        projects={sortedProjects}
+        activeProjectId={activeProjectId}
+        conversations={visibleConversations}
         activeId={activeId}
         onSelect={setActiveId}
         onNew={() => createConversation(activeConversation.mode)}
         onDelete={deleteConversation}
+        onAddProject={addProject}
+        onSelectProject={selectProject}
+        onDeleteProject={deleteProject}
       />
       <div className="flex min-w-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
