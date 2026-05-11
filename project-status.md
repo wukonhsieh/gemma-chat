@@ -3,7 +3,7 @@
 - [x] Task 1 - Define Project persistence and workspace contracts
 - [x] Task 2 - Add Project-aware renderer state and sidebar UI
 - [x] Task 3 - Route Build Mode workspace operations through Project folders
-- [ ] Task 4 - Final verification and Cortex/project status updates
+- [x] Task 4 - Final verification and Cortex/project status updates
 
 # Change Logs
 
@@ -61,3 +61,20 @@
 ### Notes
 
 已通過 `npm run typecheck`。Preview URL 仍維持 conversation id routing；filesystem root 由 main process runtime mapping 解析。
+
+## Task 4 - Final verification and Cortex/project status updates
+
+### Summary
+
+完成最終驗收，`npm run typecheck` 與 `npm run build` 皆通過。新增 Task 4 spec/harness 記錄，並在 Cortex nested repo 補充 Project workspace concept 與 workflow log，供後續 agents 快速理解 Project 到 workspace root 的路由。
+
+### Changed Files
+
+- project-status.md
+- task-spec-task-4.md
+- cortex/wiki/concepts/project-workspaces.md
+- cortex/wiki/logs/2026-05-11-project-workspaces.md
+
+### Notes
+
+Cortex nested repo 既有多個 dirty files；本輪只新增 Project workspace 相關 Cortex files，沒有修改既有 dirty Cortex records。
