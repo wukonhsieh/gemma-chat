@@ -90,7 +90,7 @@ function findSystemPython(): string | null {
         } else if (minor < 10) {
           console.log(`[mlx] Skipping ${c} — ${ver} is too old (need 3.10+)`)
         } else {
-          console.log(`[mlx] Skipping ${c} — ${ver} is too new for mlx-lm`)
+          console.log(`[mlx] Skipping ${c} — ${ver} is too new for mlx-vlm`)
         }
       }
     } catch {
@@ -106,21 +106,21 @@ function findSystemPython(): string | null {
 // ---------------------------------------------------------------------------
 
 export interface MLXStatus {
-  /** Python to use for running mlx_lm (venv python if installed, system python otherwise) */
+  /** Python to use for running mlx_vlm (venv python if installed, system python otherwise) */
   python: string
-  /** Whether mlx-lm is installed and importable */
+  /** Whether mlx-vlm is installed and importable */
   installed: boolean
 }
 
 /**
- * Check if mlx-lm is ready to use.
- * Returns the python path to use and whether mlx_lm is installed.
+ * Check if mlx-vlm is ready to use.
+ * Returns the python path to use and whether mlx_vlm is installed.
  */
 export function locateMLX(): MLXStatus | null {
-  // 1. Check if we have a working venv with mlx_lm installed
+  // 1. Check if we have a working venv with mlx_vlm installed
   const vPy = venvPython()
   if (existsSync(vPy)) {
-    // Verify the venv Python is 3.10+ — older versions can't run modern mlx-lm
+    // Verify the venv Python is 3.10+ — older versions can't run modern mlx-vlm
     try {
       const verCheck = spawnSync(vPy, ['--version'], {
         timeout: 5000,
@@ -134,21 +134,21 @@ export function locateMLX(): MLXStatus | null {
         try { rmSync(venvDir(), { recursive: true, force: true }) } catch { /* ok */ }
         // Fall through to system python detection below
       } else {
-        // Venv Python is compatible — check if mlx_lm is installed
+        // Venv Python is compatible — check if mlx_vlm is installed
         try {
-          const check = spawnSync(vPy, ['-c', 'import mlx_lm; print("ok")'], {
+          const check = spawnSync(vPy, ['-c', 'import mlx_vlm; print("ok")'], {
             timeout: 15000,
             stdio: ['ignore', 'pipe', 'pipe']
           })
           const stdout = check.stdout?.toString().trim() || ''
           if (check.status === 0 && stdout.includes('ok')) {
-            console.log('[mlx] Found mlx-lm in venv')
+            console.log('[mlx] Found mlx-vlm in venv')
             return { python: vPy, installed: true }
           }
         } catch {
-          // venv exists but mlx_lm not importable
+          // venv exists but mlx_vlm not importable
         }
-        // Venv exists but mlx_lm is missing — can still pip install into it
+        // Venv exists but mlx_vlm is missing — can still pip install into it
         return { python: vPy, installed: false }
       }
     } catch {
@@ -165,7 +165,7 @@ export function locateMLX(): MLXStatus | null {
 }
 
 // ---------------------------------------------------------------------------
-// Installation — creates a venv and installs mlx-lm
+// Installation — creates a venv and installs mlx-vlm
 // ---------------------------------------------------------------------------
 
 export type InstallProgress = {
@@ -174,7 +174,7 @@ export type InstallProgress = {
 }
 
 /**
- * Install mlx-lm into a dedicated virtual environment.
+ * Install mlx-vlm into a dedicated virtual environment.
  * Uses --index-url to bypass any corporate pip registries.
  * Returns the venv python path to use for all subsequent operations.
  */
@@ -205,24 +205,24 @@ export async function installMLX(
     '--index-url', 'https://pypi.org/simple/'
   ], onProgress)
 
-  // Step 3: Install mlx-lm (force public PyPI to bypass corporate registries)
-  onProgress({ stage: 'install', message: 'Installing mlx-lm (this may take a few minutes)…' })
+  // Step 3: Install mlx-vlm (force public PyPI to bypass corporate registries)
+  onProgress({ stage: 'install', message: 'Installing mlx-vlm (this may take a few minutes)…' })
   await runProcess(vPy, [
-    '-m', 'pip', 'install', '--upgrade', 'mlx-lm>=0.24.0',
+    '-m', 'pip', 'install', '--upgrade', 'mlx-vlm>=0.4.3',
     '--index-url', 'https://pypi.org/simple/'
   ], onProgress)
 
   // Verify the install worked
-  const check = spawnSync(vPy, ['-c', 'import mlx_lm; print("ok")'], {
+  const check = spawnSync(vPy, ['-c', 'import mlx_vlm; print("ok")'], {
     timeout: 15000,
     stdio: ['ignore', 'pipe', 'pipe']
   })
   if (check.status !== 0 || !check.stdout?.toString().includes('ok')) {
     const err = check.stderr?.toString().slice(-300) || 'unknown error'
-    throw new Error(`mlx-lm installed but failed to import: ${err}`)
+    throw new Error(`mlx-vlm installed but failed to import: ${err}`)
   }
 
-  console.log('[mlx] mlx-lm installed successfully')
+  console.log('[mlx] mlx-vlm installed successfully')
   return vPy
 }
 
@@ -284,6 +284,8 @@ export async function startServer(
 
   const env = {
     ...process.env,
+    APC_ENABLED: '1',
+    APC_NUM_BLOCKS: '4096',
     // HuggingFace cache dir — keep models in our app data
     HF_HOME: modelsDir(),
     TRANSFORMERS_CACHE: modelsDir(),
@@ -294,11 +296,13 @@ export async function startServer(
   let earlyExit: { code: number | null; stderr: string } | null = null
   let stderrBuf = ''
 
-  console.log(`[mlx] Starting server: ${python} -m mlx_lm.server --model ${model} --port ${MLX_PORT}`)
+  console.log(
+    `[mlx] Starting server: APC_ENABLED=1 APC_NUM_BLOCKS=4096 ${python} -m mlx_vlm.server --model ${model} --port ${MLX_PORT}`
+  )
 
   serverProc = spawn(
     python,
-    ['-m', 'mlx_lm.server', '--model', model, '--port', String(MLX_PORT)],
+    ['-m', 'mlx_vlm.server', '--model', model, '--port', String(MLX_PORT)],
     {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],

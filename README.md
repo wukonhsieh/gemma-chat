@@ -29,7 +29,7 @@ It's a proof-of-concept for **fully offline, local-first vibe coding** using a s
 2. **Watch it code** — Gemma writes files character-by-character with a live preview
 3. **Iterate** — Ask for changes, it edits the files and the preview updates in real-time
 
-Everything happens locally. The model runs via [MLX-LM](https://github.com/ml-explore/mlx-examples/tree/main/llms/mlx_lm), Apple's framework for running LLMs on Apple Silicon. Your code, your prompts, your conversations — all on your machine.
+Everything happens locally. The model runs via [MLX-VLM](https://github.com/ml-explore/mlx-examples/tree/main/llms/mlx_vlm), Apple's framework for running local multimodal and language models on Apple Silicon. Your code, your prompts, your conversations — all on your machine.
 
 ## Features
 
@@ -60,7 +60,7 @@ npm install
 npm run dev
 ```
 
-First launch will auto-detect Python → create a venv → install MLX-LM → download the model (~3 GB) → ready to vibe code.
+First launch will auto-detect Python → create a venv → install MLX-VLM → download the model (~3 GB) → ready to vibe code.
 
 > **Tip:** Install Python via Homebrew if you don't have it, or point the app at a Miniforge Python 3.14 env such as `/opt/homebrew/Caskroom/miniforge/base/envs/env_314/bin/python`.
 
@@ -77,7 +77,7 @@ Produces a signed `.dmg` in `dist/`. Share it directly — recipients just drag 
 | Layer | Tech |
 |---|---|
 | App Shell | Electron + Vite + React 19 + TypeScript + Tailwind |
-| Model Runtime | MLX-LM (auto-installed into a local venv) |
+| Model Runtime | MLX-VLM (auto-installed into a local venv) |
 | Speech-to-Text | transformers.js (Whisper, runs in-browser via WASM) |
 | Workspace | Per-conversation sandboxed filesystem + local HTTP server |
 
@@ -87,7 +87,7 @@ Produces a signed `.dmg` in `dist/`. Share it directly — recipients just drag 
 src/
 ├── main/              Electron main process
 │   ├── index.ts       Window + IPC + agent loop
-│   ├── mlx.ts         MLX-LM venv install / server lifecycle / chat streaming
+│   ├── mlx.ts         MLX-VLM venv install / server lifecycle / chat streaming
 │   ├── workspace.ts   Per-conversation workspace + static file server
 │   └── tools.ts       Tool definitions + system prompts + XML action parser
 ├── preload/           contextBridge API surface
