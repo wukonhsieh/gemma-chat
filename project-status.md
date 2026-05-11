@@ -2,7 +2,7 @@
 
 - [x] Task 1 - Define Project persistence and workspace contracts
 - [x] Task 2 - Add Project-aware renderer state and sidebar UI
-- [ ] Task 3 - Route Build Mode workspace operations through Project folders
+- [x] Task 3 - Route Build Mode workspace operations through Project folders
 - [ ] Task 4 - Final verification and Cortex/project status updates
 
 # Change Logs
@@ -44,3 +44,20 @@
 ### Notes
 
 已通過 `npm run typecheck:web` 與 `npm run typecheck:node`。Project folder 尚未接到 Canvas workspace IPC，會在 Task 3 完成。
+
+## Task 3 - Route Build Mode workspace operations through Project folders
+
+### Summary
+
+將 active conversation 的 `projectPath` 傳入 `sendChat`、Canvas file listing 與 open workspace folder IPC，使 main process 能在 chat/tool/live-write/preview/file list/open-folder 流程中註冊並使用 Project folder。沒有 `projectPath` 的 fallback conversation 仍維持既有 workspace。
+
+### Changed Files
+
+- project-status.md
+- task-spec-task-3.md
+- src/renderer/src/components/Chat.tsx
+- src/renderer/src/components/Canvas.tsx
+
+### Notes
+
+已通過 `npm run typecheck`。Preview URL 仍維持 conversation id routing；filesystem root 由 main process runtime mapping 解析。

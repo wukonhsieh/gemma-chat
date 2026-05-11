@@ -372,7 +372,8 @@ export default function Chat({ model, onSwitchModel }: Props) {
           messages: history,
           model,
           enableTools: true,
-          mode: conv.mode
+          mode: conv.mode,
+          workspacePath: conv.projectPath
         },
         (chunk: StreamChunk) => {
           if (streamRef.current.abort) return
@@ -493,6 +494,7 @@ export default function Chat({ model, onSwitchModel }: Props) {
         {canvasVisible && (
           <ResizableCanvas
             conversationId={activeId}
+            workspacePath={activeConversation.projectPath}
             streaming={streaming}
             onClose={() => updateActive((c) => ({ ...c, canvasOpen: false }))}
           />
@@ -504,10 +506,12 @@ export default function Chat({ model, onSwitchModel }: Props) {
 
 function ResizableCanvas({
   conversationId,
+  workspacePath,
   streaming,
   onClose
 }: {
   conversationId: string
+  workspacePath?: string
   streaming: boolean
   onClose: () => void
 }) {
@@ -550,6 +554,7 @@ function ResizableCanvas({
       />
       <Canvas
         conversationId={conversationId}
+        workspacePath={workspacePath}
         streaming={streaming}
         onClose={onClose}
       />

@@ -3,6 +3,7 @@ import type { WorkspaceFile } from '@shared/types'
 
 interface Props {
   conversationId: string
+  workspacePath?: string
   streaming: boolean
   onClose: () => void
 }
@@ -15,7 +16,7 @@ interface LiveFile {
   done: boolean
 }
 
-export default function Canvas({ conversationId, streaming, onClose }: Props) {
+export default function Canvas({ conversationId, workspacePath, streaming, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('preview')
   const [port, setPort] = useState(0)
   const [files, setFiles] = useState<WorkspaceFile[]>([])
@@ -39,7 +40,7 @@ export default function Canvas({ conversationId, streaming, onClose }: Props) {
     setLiveFile(null)
     setAutoSwitched(false)
     setNonce((n) => n + 1)
-  }, [conversationId])
+  }, [conversationId, workspacePath])
 
   useEffect(() => {
     const unsub = window.api.onWorkspaceChanged((ev) => {
@@ -51,7 +52,7 @@ export default function Canvas({ conversationId, streaming, onClose }: Props) {
       }, 350)
     })
     return unsub
-  }, [conversationId])
+  }, [conversationId, workspacePath])
 
   useEffect(() => {
     const unsub = window.api.onFileStreaming((ev) => {
@@ -75,7 +76,7 @@ export default function Canvas({ conversationId, streaming, onClose }: Props) {
 
   async function refreshFiles(): Promise<void> {
     try {
-      const list = await window.api.listWorkspace(conversationId)
+      const list = await window.api.listWorkspace(conversationId, workspacePath)
       setFiles(list)
     } catch {
       setFiles([])
@@ -131,7 +132,7 @@ export default function Canvas({ conversationId, streaming, onClose }: Props) {
         </IconButton>
         <IconButton
           title="Open workspace folder"
-          onClick={() => window.api.openWorkspace(conversationId)}
+          onClick={() => window.api.openWorkspace(conversationId, workspacePath)}
         >
           <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
             <path d="M2 4a1 1 0 0 1 1-1h3.5l1.5 1.5H13a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z" />
