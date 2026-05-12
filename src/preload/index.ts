@@ -3,6 +3,7 @@ import type {
   ChatRequest,
   SetupStatus,
   StreamChunk,
+  ToolPermissionResponse,
   WorkspaceInfo,
   WorkspaceFile
 } from '../shared/types'
@@ -44,6 +45,10 @@ const api = {
 
   listTools: (): Promise<Array<{ name: string; description: string; mode: string }>> =>
     ipcRenderer.invoke('tools:list'),
+
+  respondToToolPermission: (
+    response: ToolPermissionResponse
+  ): Promise<{ ok: boolean }> => ipcRenderer.invoke('tool-permission:respond', response),
 
   getWorkspace: (conversationId: string, workspacePath?: string): Promise<WorkspaceInfo> =>
     ipcRenderer.invoke('workspace:info', { conversationId, workspacePath }),

@@ -12,6 +12,7 @@ import {
 export interface ToolContext {
   conversationId: string
   onFileChange?: () => void
+  allowOutsideWorkspace?: boolean
 }
 
 export interface ToolSpec {
@@ -135,7 +136,9 @@ async function writeFile(args: Record<string, unknown>, ctx: ToolContext): Promi
   const raw = typeof args.content === 'string' ? args.content : ''
   if (!path) return 'Error: missing <path>'
   const content = cleanFileContent(raw, path)
-  await wsWriteFile(ctx.conversationId, path, content)
+  await wsWriteFile(ctx.conversationId, path, content, {
+    allowOutsideWorkspace: ctx.allowOutsideWorkspace
+  })
   ctx.onFileChange?.()
   const lines = content.split('\n').length
   return `Wrote ${path} (${content.length} bytes, ${lines} lines).`
@@ -181,7 +184,9 @@ async function readFile(args: Record<string, unknown>, ctx: ToolContext): Promis
   const path = String(args.path ?? '').trim()
   if (!path) return 'Error: missing <path>'
   try {
-    const content = await wsReadFile(ctx.conversationId, path)
+    const content = await wsReadFile(ctx.conversationId, path, {
+      allowOutsideWorkspace: ctx.allowOutsideWorkspace
+    })
     if (content.length > 20_000) {
       return content.slice(0, 20_000) + '\n[…truncated]'
     }
@@ -199,7 +204,9 @@ async function editFile(args: Record<string, unknown>, ctx: ToolContext): Promis
   if (!path) return 'Error: missing <path>'
   if (!oldStr) return 'Error: missing <old_string>'
   try {
-    const r = await wsEditFile(ctx.conversationId, path, oldStr, newStr, replaceAll)
+    const r = await wsEditFile(ctx.conversationId, path, oldStr, newStr, replaceAll, {
+      allowOutsideWorkspace: ctx.allowOutsideWorkspace
+    })
     ctx.onFileChange?.()
     return `Edited ${path} (${r.occurrences} replacement${r.occurrences === 1 ? '' : 's'}).`
   } catch (e) {
@@ -225,7 +232,9 @@ async function deleteFile(args: Record<string, unknown>, ctx: ToolContext): Prom
   const path = String(args.path ?? '').trim()
   if (!path) return 'Error: missing <path>'
   try {
-    await wsDeleteFile(ctx.conversationId, path)
+    await wsDeleteFile(ctx.conversationId, path, {
+      allowOutsideWorkspace: ctx.allowOutsideWorkspace
+    })
     ctx.onFileChange?.()
     return `Deleted ${path}.`
   } catch (e) {

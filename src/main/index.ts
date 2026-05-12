@@ -30,9 +30,22 @@ import {
   listTree,
   workspaceDir,
   wsWriteFile,
-  registerConversationWorkspace
+  registerConversationWorkspace,
+  classifyWorkspacePath
 } from './workspace'
-import type { ChatRequest, StreamChunk, ToolCall } from '../shared/types'
+import {
+  DEFAULT_TOOL_PERMISSION_POLICY,
+  evaluateToolPermission,
+  type ToolPermissionEvaluation
+} from './permissions'
+import type {
+  ChatRequest,
+  StreamChunk,
+  ToolCall,
+  ToolPermissionRequest,
+  ToolPermissionResponse,
+  ToolPermissionResponseDecision
+} from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -141,6 +154,91 @@ async function handleSetup(model: string): Promise<void> {
 
 const MAX_TOOL_ROUNDS_CHAT = 6
 const MAX_TOOL_ROUNDS_CODE = 40
+
+const PATH_PERMISSION_TOOLS = new Set(['write_file', 'read_file', 'edit_file', 'delete_file'])
+
+interface ActionPermissionEvaluation extends ToolPermissionEvaluation {
+  allowOutsideWorkspaceOnApproval?: boolean
+}
+
+interface PendingToolPermission {
+  conversationId: string
+  resolve: (decision: ToolPermissionResponseDecision) => void
+  reject: (error: Error) => void
+}
+
+const pendingToolPermissions = new Map<string, PendingToolPermission>()
+
+function abortError(message: string): Error {
+  const error = new Error(message)
+  error.name = 'AbortError'
+  return error
+}
+
+function evaluateActionPermission(
+  req: ChatRequest,
+  toolName: string,
+  args: Record<string, unknown>
+): ActionPermissionEvaluation {
+  const policy = { ...DEFAULT_TOOL_PERMISSION_POLICY, ...(req.toolPermissions ?? {}) }
+  const decision = evaluateToolPermission(toolName, policy)
+  if (decision.mode === 'deny') return decision
+
+  if (PATH_PERMISSION_TOOLS.has(toolName) && typeof args.path === 'string') {
+    const pathCheck = classifyWorkspacePath(req.conversationId, args.path)
+    if (pathCheck.requiresAsk) {
+      return {
+        mode: 'ask',
+        reason: `${pathCheck.reason} Approval is required to access ${pathCheck.resolvedPath}.`,
+        allowOutsideWorkspaceOnApproval: true
+      }
+    }
+  }
+
+  return decision
+}
+
+function waitForToolPermission(
+  request: ToolPermissionRequest,
+  signal: AbortSignal
+): Promise<ToolPermissionResponseDecision> {
+  if (signal.aborted) return Promise.reject(abortError('Permission request aborted.'))
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      pendingToolPermissions.delete(request.id)
+      reject(abortError('Permission request aborted.'))
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    pendingToolPermissions.set(request.id, {
+      conversationId: request.conversationId,
+      resolve: (decision) => {
+        signal.removeEventListener('abort', onAbort)
+        pendingToolPermissions.delete(request.id)
+        resolve(decision)
+      },
+      reject: (error) => {
+        signal.removeEventListener('abort', onAbort)
+        pendingToolPermissions.delete(request.id)
+        reject(error)
+      }
+    })
+  })
+}
+
+function resolveToolPermission(response: ToolPermissionResponse): boolean {
+  const pending = pendingToolPermissions.get(response.requestId)
+  if (!pending) return false
+  pending.resolve(response.decision)
+  return true
+}
+
+function clearConversationPermissions(conversationId: string): void {
+  for (const [id, pending] of pendingToolPermissions.entries()) {
+    if (pending.conversationId !== conversationId) continue
+    pending.reject(abortError('Conversation ended before permission was resolved.'))
+    pendingToolPermissions.delete(id)
+  }
+}
 
 function actionTarget(_name: string, args: Record<string, unknown>): string | undefined {
   if (typeof args.path === 'string') return args.path
@@ -301,7 +399,12 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 
           // Live write_file streaming — create/update the file as <content> grows
           if (pendingAction?.name === 'write_file' && pendingAction.target && !livePath) {
-            livePath = pendingAction.target
+            const livePermission = evaluateActionPermission(req, 'write_file', {
+              path: pendingAction.target
+            })
+            if (livePermission.mode === 'allow') {
+              livePath = pendingAction.target
+            }
           }
           if (livePath && liveContentStart < 0) {
             const idx = buffer.indexOf('<content>')
@@ -367,11 +470,48 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
               activity: { kind: 'tool', tool: found.name, target: actionTarget(found.name, found.args) }
             })
 
-            let result: string
+            let result = ''
             let hadError = false
+            let shouldRunTool = true
+            let allowOutsideWorkspace = false
+            const permission = evaluateActionPermission(req, found.name, found.args)
+            if (permission.mode === 'deny') {
+              result = `Permission denied for ${found.name}: ${permission.reason}`
+              hadError = true
+              shouldRunTool = false
+              emit({ type: 'tool_result', id: call.id, error: result })
+            } else if (permission.mode === 'ask') {
+              const request: ToolPermissionRequest = {
+                id: `perm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                conversationId: req.conversationId,
+                toolCallId: call.id,
+                toolName: found.name,
+                args: found.args,
+                mode: 'ask',
+                target: actionTarget(found.name, found.args),
+                reason: permission.reason,
+                createdAt: Date.now()
+              }
+              emit({ type: 'tool_permission', request })
+              const decision = await waitForToolPermission(request, abort.signal)
+              if (decision === 'deny') {
+                result = `Permission denied for ${found.name}: ${permission.reason}`
+                hadError = true
+                shouldRunTool = false
+                emit({ type: 'tool_result', id: call.id, error: result })
+              } else {
+                allowOutsideWorkspace = permission.allowOutsideWorkspaceOnApproval === true
+              }
+            }
+
             try {
-              result = await runTool(found.name, found.args, ctx)
-              emit({ type: 'tool_result', id: call.id, result })
+              if (shouldRunTool) {
+                result = await runTool(found.name, found.args, {
+                  ...ctx,
+                  allowOutsideWorkspace
+                })
+                emit({ type: 'tool_result', id: call.id, result })
+              }
             } catch (e) {
               result = `Error: ${(e as Error).message}`
               hadError = true
@@ -442,6 +582,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       emit({ type: 'error', error: (e as Error).message })
     }
   } finally {
+    clearConversationPermissions(req.conversationId)
     chatAbortControllers.delete(req.conversationId)
   }
 }
@@ -543,6 +684,10 @@ app.whenReady().then(async () => {
       description: t.description,
       mode: t.mode
     }))
+  })
+
+  ipcMain.handle('tool-permission:respond', async (_e, response: ToolPermissionResponse) => {
+    return { ok: resolveToolPermission(response) }
   })
 
   ipcMain.handle(

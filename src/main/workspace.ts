@@ -338,10 +338,11 @@ export async function listTree(base: string, max = 200): Promise<FileEntry[]> {
 export async function wsWriteFile(
   conversationId: string,
   path: string,
-  content: string
+  content: string,
+  options: WorkspaceAccessOptions = {}
 ): Promise<string> {
   const base = await ensureWorkspace(conversationId)
-  const target = assertInWorkspace(base, path)
+  const target = resolveWorkspaceAccessPath(base, path, options)
   await mkdir(dirname(target), { recursive: true })
   const tmp = target + '.tmp-' + Date.now()
   await writeFile(tmp, content, 'utf-8')
@@ -349,9 +350,29 @@ export async function wsWriteFile(
   return target
 }
 
-export async function wsReadFile(conversationId: string, path: string): Promise<string> {
+export interface WorkspaceAccessOptions {
+  allowOutsideWorkspace?: boolean
+}
+
+function resolveWorkspaceAccessPath(
+  workspaceRoot: string,
+  path: string,
+  options: WorkspaceAccessOptions
+): string {
+  const classification = classifyPathAgainstWorkspace(workspaceRoot, path)
+  if (classification.withinWorkspace || options.allowOutsideWorkspace === true) {
+    return classification.resolvedPath
+  }
+  throw new Error(`Path escapes workspace: ${path}`)
+}
+
+export async function wsReadFile(
+  conversationId: string,
+  path: string,
+  options: WorkspaceAccessOptions = {}
+): Promise<string> {
   const base = await ensureWorkspace(conversationId)
-  const target = assertInWorkspace(base, path)
+  const target = resolveWorkspaceAccessPath(base, path, options)
   return readFile(target, 'utf-8')
 }
 
@@ -360,14 +381,15 @@ export async function wsEditFile(
   path: string,
   oldString: string,
   newString: string,
-  replaceAll = false
+  replaceAll = false,
+  options: WorkspaceAccessOptions = {}
 ): Promise<{ occurrences: number }> {
-  const content = await wsReadFile(conversationId, path)
+  const content = await wsReadFile(conversationId, path, options)
   if (replaceAll) {
     const parts = content.split(oldString)
     if (parts.length === 1) throw new Error(`old_string not found in ${path}`)
     const next = parts.join(newString)
-    await wsWriteFile(conversationId, path, next)
+    await wsWriteFile(conversationId, path, next, options)
     return { occurrences: parts.length - 1 }
   }
   const idx = content.indexOf(oldString)
@@ -377,13 +399,17 @@ export async function wsEditFile(
     throw new Error(`old_string appears multiple times in ${path}. Use replace_all or add context.`)
   }
   const next = content.slice(0, idx) + newString + content.slice(idx + oldString.length)
-  await wsWriteFile(conversationId, path, next)
+  await wsWriteFile(conversationId, path, next, options)
   return { occurrences: 1 }
 }
 
-export async function wsDeleteFile(conversationId: string, path: string): Promise<void> {
+export async function wsDeleteFile(
+  conversationId: string,
+  path: string,
+  options: WorkspaceAccessOptions = {}
+): Promise<void> {
   const base = await ensureWorkspace(conversationId)
-  const target = assertInWorkspace(base, path)
+  const target = resolveWorkspaceAccessPath(base, path, options)
   await rm(target, { recursive: true, force: true })
 }
 
