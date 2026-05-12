@@ -34,8 +34,9 @@ import {
   classifyWorkspacePath
 } from './workspace'
 import {
-  DEFAULT_TOOL_PERMISSION_POLICY,
   evaluateToolPermission,
+  loadToolPermissionPolicy,
+  type ToolPermissionPolicy,
   type ToolPermissionEvaluation
 } from './permissions'
 import type {
@@ -177,10 +178,11 @@ function abortError(message: string): Error {
 
 function evaluateActionPermission(
   req: ChatRequest,
+  basePolicy: ToolPermissionPolicy,
   toolName: string,
   args: Record<string, unknown>
 ): ActionPermissionEvaluation {
-  const policy = { ...DEFAULT_TOOL_PERMISSION_POLICY, ...(req.toolPermissions ?? {}) }
+  const policy = { ...basePolicy, ...(req.toolPermissions ?? {}) }
   const decision = evaluateToolPermission(toolName, policy)
   if (decision.mode === 'deny') return decision
 
@@ -253,6 +255,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
   const abort = new AbortController()
   chatAbortControllers.set(req.conversationId, abort)
   registerConversationWorkspace(req.conversationId, req.workspacePath)
+  const toolPermissionPolicy = await loadToolPermissionPolicy()
 
   const emit = (chunk: StreamChunk): void => send(channel, chunk)
 
@@ -399,9 +402,12 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 
           // Live write_file streaming — create/update the file as <content> grows
           if (pendingAction?.name === 'write_file' && pendingAction.target && !livePath) {
-            const livePermission = evaluateActionPermission(req, 'write_file', {
-              path: pendingAction.target
-            })
+            const livePermission = evaluateActionPermission(
+              req,
+              toolPermissionPolicy,
+              'write_file',
+              { path: pendingAction.target }
+            )
             if (livePermission.mode === 'allow') {
               livePath = pendingAction.target
             }
@@ -474,7 +480,12 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
             let hadError = false
             let shouldRunTool = true
             let allowOutsideWorkspace = false
-            const permission = evaluateActionPermission(req, found.name, found.args)
+            const permission = evaluateActionPermission(
+              req,
+              toolPermissionPolicy,
+              found.name,
+              found.args
+            )
             if (permission.mode === 'deny') {
               result = `Permission denied for ${found.name}: ${permission.reason}`
               hadError = true

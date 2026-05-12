@@ -50,3 +50,12 @@
 - 粗略作法: 執行 `npm run typecheck` 與 `npm run build`；手動驗證 Chat Mode tools、Build Mode workspace write、workspace 外 ask、deny、allow；更新 Cortex wiki/logs。
 - 驗證方式: `npm run typecheck`、`npm run build`，外加上述手動 flows。
 - 風險 / 備註: 若 build 受環境影響失敗，需要在 status notes 記錄原因與已通過的 narrower checks。
+
+### Task 6 - Load tool permissions from Gabie config
+
+- 為什麼現在做: 使用者需要用固定本機設定檔管理 tool permission，而不是只依賴內建 runtime default。
+- 目標: Main process 讀取 `~/.config/gabie/gabie.json` 作為 tool permission policy；檔案不存在時寫入 default policy 並使用 default。
+- 背景 / 依賴: 依賴 Task 1 的 `ToolPermissionMode` 與 Task 3 的 main-process permission gate。
+- 粗略作法: 在 `src/main/permissions.ts` 新增 config path、default config、loader 與 normalization；`handleChat` 開始時載入 policy 並交給 `evaluateActionPermission`。
+- 驗證方式: `npm run typecheck:node`、`npm run typecheck`、`npm run build`。
+- 風險 / 備註: 缺漏或無效值應 fallback 到內建 default；不要讓 config parse error 造成 tool loop 崩潰。

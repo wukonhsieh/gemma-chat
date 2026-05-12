@@ -12,6 +12,7 @@
 - 使用者批准 workspace 外存取時，批准範圍以單次 tool call 為 baseline；是否記住決定可作為後續 task 擴充，除非本 iteration 明確納入。
 - Build Mode 的 live-write partial file update 也必須遵守 workspace path policy，不能在 ask 尚未批准前寫入 workspace 外部路徑。
 - 現有沒有 Project 時的 fallback workspace 行為必須保留。
+- Tool permission 設定由 `~/.config/gabie/gabie.json` 提供；若檔案不存在，app 會寫入預設值並使用該預設值。
 
 # User Requirements
 
@@ -80,6 +81,9 @@
 14. Workspace preview, file listing, open folder, generated file writes, file reads, edits, deletes, and bash execution must keep using the resolved conversation workspace as their default boundary.
 15. Existing conversations and Project-based workspace routing must remain compatible.
 16. Permission request state must be represented in the shared main/preload/renderer contract so UI state and tool loop state stay synchronized.
+17. The main process must read tool permission settings from `~/.config/gabie/gabie.json`.
+18. If `~/.config/gabie/gabie.json` does not exist, the application must create it with the default tool permission policy and use those defaults.
+19. Missing or invalid tool-specific entries in the config must fall back to the built-in default policy for that tool.
 
 # Technical Specifications
 
@@ -89,5 +93,5 @@
 - Tool loop: Permission evaluation belongs in the main process before `runTool` executes the tool.
 - Workspace safety: Preserve `assertInWorkspace` or an equivalent normalized path guard in `src/main/workspace.ts`; permission approval must not remove path normalization.
 - Renderer UI: Extend the existing tool call card or nearby message UI to show pending permission state and approve/deny actions.
-- Persistence: This iteration may keep permission policy in runtime state unless a task explicitly adds persisted user settings.
+- Persistence: Tool permission policy is stored at `~/.config/gabie/gabie.json` using a `tools` object keyed by tool name.
 - Verification baseline: `npm run typecheck` and `npm run build`.

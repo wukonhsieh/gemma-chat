@@ -1,4 +1,7 @@
 import type { ToolPermissionMode } from '../shared/types'
+import { mkdir, readFile, writeFile } from 'fs/promises'
+import { dirname, join } from 'path'
+import { homedir } from 'os'
 
 export type ToolPermissionPolicy = Partial<Record<string, ToolPermissionMode>>
 
@@ -18,6 +21,55 @@ export const DEFAULT_TOOL_PERMISSION_POLICY: ToolPermissionPolicy = {
   delete_file: 'ask',
   run_bash: 'ask',
   open_preview: 'allow'
+}
+
+export interface ToolPermissionConfig {
+  tools: Record<string, ToolPermissionMode>
+}
+
+export function toolPermissionConfigPath(): string {
+  return join(homedir(), '.config', 'gabie', 'gabie.json')
+}
+
+export async function loadToolPermissionPolicy(): Promise<ToolPermissionPolicy> {
+  const path = toolPermissionConfigPath()
+  try {
+    const raw = await readFile(path, 'utf-8')
+    return normalizeToolPermissionConfig(JSON.parse(raw)).tools
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code
+    if (code !== 'ENOENT') {
+      return { ...DEFAULT_TOOL_PERMISSION_POLICY }
+    }
+    const config = defaultToolPermissionConfig()
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(path, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    return config.tools
+  }
+}
+
+function defaultToolPermissionConfig(): ToolPermissionConfig {
+  return {
+    tools: { ...DEFAULT_TOOL_PERMISSION_POLICY } as Record<string, ToolPermissionMode>
+  }
+}
+
+function normalizeToolPermissionConfig(value: unknown): ToolPermissionConfig {
+  const source =
+    value && typeof value === 'object' && 'tools' in value
+      ? (value as { tools?: unknown }).tools
+      : value
+  const tools: Record<string, ToolPermissionMode> = {
+    ...DEFAULT_TOOL_PERMISSION_POLICY
+  } as Record<string, ToolPermissionMode>
+  if (source && typeof source === 'object') {
+    for (const [name, mode] of Object.entries(source as Record<string, unknown>)) {
+      if (mode === 'deny' || mode === 'ask' || mode === 'allow') {
+        tools[name] = mode
+      }
+    }
+  }
+  return { tools }
 }
 
 export function evaluateToolPermission(

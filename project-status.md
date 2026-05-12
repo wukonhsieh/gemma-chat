@@ -5,6 +5,7 @@
 - [x] Task 3 - Gate tool execution in the main process
 - [x] Task 4 - Render permission requests and user controls
 - [x] Task 5 - Final verification and Cortex/status updates
+- [x] Task 6 - Load tool permissions from Gabie config
 
 # Change Logs
 
@@ -101,3 +102,23 @@ Renderer 現在會處理 `tool_permission` stream chunk，將 pending permission
 ### Notes
 
 Cortex lint 已通過。Source project 與 nested Cortex repo 需分開 commit；未追蹤的 agent bootstrap files 不屬於本 iteration commits。
+
+## Task 6 - Load tool permissions from Gabie config
+
+### Summary
+
+新增 `~/.config/gabie/gabie.json` tool permission config loader。Main process 在 chat request 開始時讀取該檔作為 permission policy；若檔案不存在，會建立包含 default tool policy 的 config 並使用預設值。缺漏或無效 tool entries 會 fallback 到 built-in defaults，避免設定檔問題中斷 tool loop。
+
+### Changed Files
+
+- requirements-spec.md
+- project-plan.md
+- project-status.md
+- task-spec-task-6.md
+- harness-plan-task-6.md
+- src/main/permissions.ts
+- src/main/index.ts
+
+### Notes
+
+已通過 `npm run typecheck:node`、`npm run typecheck` 與 `npm run build`。
