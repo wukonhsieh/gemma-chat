@@ -47,11 +47,60 @@ export async function ensureWorkspace(conversationId: string): Promise<string> {
 
 export function assertInWorkspace(base: string, target: string): string {
   const resolved = resolve(base, target)
-  const rel = relative(base, resolved)
-  if (rel.startsWith('..') || rel.startsWith('/') || rel.includes('..' + sep)) {
+  if (!isResolvedPathInside(base, resolved)) {
     throw new Error(`Path escapes workspace: ${target}`)
   }
   return resolved
+}
+
+export interface WorkspacePathClassification {
+  requestedPath: string
+  workspaceRoot: string
+  resolvedPath: string
+  withinWorkspace: boolean
+  requiresAsk: boolean
+  reason: string
+}
+
+export function classifyWorkspacePath(
+  conversationId: string,
+  requestedPath: string
+): WorkspacePathClassification {
+  return classifyPathAgainstWorkspace(workspaceDir(conversationId), requestedPath)
+}
+
+export function classifyPathAgainstWorkspace(
+  workspaceRoot: string,
+  requestedPath: string
+): WorkspacePathClassification {
+  const root = resolve(workspaceRoot)
+  const raw = String(requestedPath ?? '')
+  const trimmed = raw.trim()
+  const resolvedPath = resolve(root, trimmed || '.')
+  const withinWorkspace = !!trimmed && isResolvedPathInside(root, resolvedPath)
+  const requiresAsk = !withinWorkspace
+  let reason = 'Path is inside the workspace.'
+  if (!trimmed) {
+    reason = 'Path is empty.'
+  } else if (requiresAsk) {
+    reason = isAbsolute(trimmed)
+      ? 'Absolute path is outside the workspace.'
+      : 'Relative path escapes the workspace.'
+  }
+  return {
+    requestedPath: raw,
+    workspaceRoot: root,
+    resolvedPath,
+    withinWorkspace,
+    requiresAsk,
+    reason
+  }
+}
+
+function isResolvedPathInside(workspaceRoot: string, resolvedPath: string): boolean {
+  const root = resolve(workspaceRoot)
+  const rel = relative(root, resolvedPath)
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel) && !rel.includes('..' + sep))
 }
 
 const MIME: Record<string, string> = {
