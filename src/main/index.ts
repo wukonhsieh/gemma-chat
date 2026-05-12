@@ -251,6 +251,44 @@ function actionTarget(_name: string, args: Record<string, unknown>): string | un
   return undefined
 }
 
+function latestUserMessage(req: ChatRequest): string {
+  for (let i = req.messages.length - 1; i >= 0; i--) {
+    const message = req.messages[i]
+    if (message.role === 'user') return message.content
+  }
+  return ''
+}
+
+function hasExplicitBuildIntent(req: ChatRequest): boolean {
+  const text = latestUserMessage(req).toLowerCase()
+  if (!text.trim()) return false
+
+  const negativeIntent =
+    /\b(don't|do not|dont|without|no need to|not asking you to)\b.{0,40}\b(build|create|make|write|code|app|page|site|file)\b/.test(
+      text
+    ) ||
+    /(不要|不用|不需要|先不要|沒有要).{0,24}(寫|做|建立|創建|產生|生成|開發|實作|app|應用|網頁|網站|檔案|程式)/.test(
+      text
+    )
+
+  if (negativeIntent) return false
+
+  return (
+    /\b(build|create|make|implement|generate|write|code|scaffold|prototype)\b.{0,80}\b(app|page|site|website|demo|script|component|game|tool|file|project)\b/.test(
+      text
+    ) ||
+    /\b(app|page|site|website|demo|script|component|game|tool|project)\b.{0,80}\b(build|create|make|implement|generate|write|code|scaffold|prototype)\b/.test(
+      text
+    ) ||
+    /(做|建立|創建|產生|生成|寫|開發|實作|刻|弄).{0,24}(app|應用|網頁|網站|頁面|demo|腳本|程式|遊戲|工具|專案|檔案)/.test(
+      text
+    ) ||
+    /(app|應用|網頁|網站|頁面|demo|腳本|程式|遊戲|工具|專案|檔案).{0,24}(做|建立|創建|產生|生成|寫|開發|實作|刻|弄)/.test(
+      text
+    )
+  )
+}
+
 async function handleChat(req: ChatRequest, channel: string): Promise<void> {
   const abort = new AbortController()
   chatAbortControllers.set(req.conversationId, abort)
@@ -561,7 +599,12 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       if (!executedAction) {
         // In Build mode, if the model just described a plan without writing code,
         // nudge it to start coding immediately instead of ending the turn.
-        if (req.mode === 'code' && round === 0 && buffer.trim().length > 0) {
+        if (
+          req.mode === 'code' &&
+          round === 0 &&
+          buffer.trim().length > 0 &&
+          hasExplicitBuildIntent(req)
+        ) {
           // Flush the plan text to the UI
           if (emittedIdx < buffer.length) {
             emit({ type: 'token', text: buffer.slice(emittedIdx) })
