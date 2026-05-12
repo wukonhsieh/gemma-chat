@@ -2,79 +2,50 @@
 
 ## Goal
 
-- 建立 Project-aware persistence / workspace routing 的基礎 contract，讓 renderer 可以取得 folder path，並讓 main process 能把 conversation 對應到指定 workspace folder，同時保留舊的 per-conversation fallback。
+- 建立 tool permission 的共享契約與 main process policy model baseline，讓後續 tasks 可以在不重塑資料結構的前提下加入 ask gate、workspace path forced ask 與 renderer controls。
 
 ## Non-Goals
 
-- 不實作完整 Project selector UI。
-- 不改變 Project 排序或 conversation list 呈現。
-- 不刪除或搬移既有 generated workspace 目錄。
-- 不修改 MLX streaming 或 XML tool protocol 行為。
+- 本 task 不實作等待使用者 approve/deny 的完整流程。
+- 本 task 不實作 workspace 外路徑分類或 forced ask。
+- 本 task 不新增 renderer 的 approve/deny UI。
+- 本 task 不改變現有 tool execution 行為；既有 tools 仍依目前流程執行。
 
 ## Functional Spec
 
 - Input:
-  - Renderer 可透過 `window.api.selectProjectFolder()` 要求使用者選擇 folder。
-  - `ChatRequest` 可帶入 optional `workspacePath`。
-  - Workspace IPC 可在需要時帶入 optional `workspacePath`。
+  - 現有 `ToolCall`、`ChatRequest`、`StreamChunk` contracts。
+  - 後續 main process tool loop 可使用的 tool name、args、conversation id。
 - Output:
-  - Folder picker 回傳選到的 absolute path；取消時回傳 `null`。
-  - Main process 在收到含 `workspacePath` 的 conversation request 或 workspace IPC 時，將該 conversation id 對應到該 folder。
-  - 未提供 `workspacePath` 的 conversation 繼續使用既有 `userData/workspaces/<conversationId>` fallback。
+  - Shared types 能表示 `deny`、`ask`、`allow`。
+  - Shared types 能表示 pending permission request 與 approve/deny response。
+  - `ToolCall` 能攜帶 permission 狀態，供後續 renderer 顯示。
+  - Main process 有可重用 permission policy helper，能回傳基於 tool name 的 baseline decision。
 - State Transitions:
-  - `conversationId -> workspacePath` mapping 可在 main process runtime 中註冊或更新。
-  - Mapping 不要求跨 app 重啟保存；renderer 持久化資料後會在下一次 request 重新提供 path。
+  - Tool permission request 可從 pending 變成 approved 或 denied；本 task 只定義狀態，不實作 runtime transition。
 - Rules:
-  - `workspacePath` 必須是 absolute path，且 workspace filesystem operations 仍需通過 workspace boundary guard。
-  - Shared IPC shape 必須由 `src/shared/types.ts` 定義，preload 只暴露 typed bridge。
+  - `deny` 表示不得執行 tool。
+  - `ask` 表示 tool 必須等待 user response。
+  - `allow` 表示沒有更高優先級安全規則時可執行 tool。
 
 ## Constraints
 
-- Renderer 不直接使用 Node/Electron APIs。
-- Workspace fallback 必須維持相容舊 conversations。
-- `assertInWorkspace` 或等效 path traversal guard 必須仍套用在所有 workspace file operations。
-- Folder selection 必須由 Electron main process 執行。
+- 跨 process payload 必須定義在 `src/shared/types.ts`。
+- 新增 stream contract 時不能讓 preload terminal cleanup 誤判；`done` / `error` 仍是 terminal chunk。
+- Main process permission helper 不可造成現有 tool behavior 改變。
+- 保留現有 Project-based `workspacePath` contract 與 conversation persistence compatibility。
 
 ## Acceptance Criteria
 
-1. Given renderer calls `selectProjectFolder`
-   When the user selects a folder
-   Then preload returns the selected folder path as a string.
-2. Given renderer calls `selectProjectFolder`
-   When the user cancels selection
-   Then preload returns `null`.
-3. Given a `ChatRequest` includes `workspacePath`
-   When main handles the chat
-   Then workspace operations for that conversation resolve under `workspacePath`.
-4. Given a `ChatRequest` does not include `workspacePath`
-   When main handles the chat
-   Then workspace operations use the existing per-conversation fallback directory.
-5. Given a workspace-relative path attempts to escape the resolved root
-   When workspace code resolves the path
-   Then the operation is rejected by the workspace guard.
-
-# Harness Plan
-
-## 建議建立的護欄清單
-
-| AC 編號 | 護欄形式 | 工具 | 預期輸出 |
-|---|---|---|---|
-| AC-1 | Type/API contract check | TypeScript | `selectProjectFolder` exists on `window.api` with `Promise<string \| null>` shape |
-| AC-2 | Type/API contract check | TypeScript | cancellation return type permits `null` without renderer casts |
-| AC-3 | Unit-level assertion | TypeScript typecheck + workspace helper usage | `ChatRequest.workspacePath` can be passed into main and registered before workspace resolution |
-| AC-4 | Regression guard | `npm run typecheck:node` | existing workspace calls without path still compile |
-| AC-5 | Existing invariant guard | `npm run typecheck:node` plus code review | `assertInWorkspace` remains the resolver for relative workspace paths |
-
-## Domain Invariants
-
-- A conversation with no registered Project path resolves to `userData/workspaces/<sanitized conversation id>`.
-- A registered Project path replaces only the workspace root for that conversation; relative file operations still cannot escape the root.
-- Folder picker cancellation must not create or mutate Project state.
-
-## Contract Tests
-
-- Shared contract boundary: `ProjectRecord`, `ChatRequest.workspacePath`, and workspace IPC optional path arguments must compile across `src/shared/types.ts`, `src/preload/index.ts`, and main IPC handlers.
-
-## 快速執行命令
-
-- `npm run typecheck`
+1. Given the shared type contract
+   When TypeScript checks `src/shared/types.ts`
+   Then it exposes permission policy, request, response, and tool-call permission state types covering `deny`, `ask`, and `allow`.
+2. Given main process permission evaluation
+   When a known tool name is evaluated
+   Then the helper returns a deterministic baseline decision from a default policy.
+3. Given current chat streaming behavior
+   When the new contract is compiled
+   Then existing `done` / `error` terminal semantics remain unchanged.
+4. Given the current codebase
+   When `npm run typecheck:node` and `npm run typecheck:web` run
+   Then both commands pass without implementing renderer approval UI.

@@ -22,6 +22,18 @@ export interface ToolCall {
   result?: string
   error?: string
   running?: boolean
+  permission?: ToolPermissionState
+}
+
+export type ToolPermissionMode = 'deny' | 'ask' | 'allow'
+
+export type ToolPermissionResponseDecision = 'allow' | 'deny'
+
+export interface ToolPermissionState {
+  mode: ToolPermissionMode
+  requestId?: string
+  status?: 'pending' | 'approved' | 'denied'
+  reason?: string
 }
 
 export type Role = 'user' | 'assistant' | 'system' | 'tool'
@@ -54,6 +66,7 @@ export interface ChatRequest {
   enableTools: boolean
   mode: AgentMode
   workspacePath?: string
+  toolPermissions?: Partial<Record<string, ToolPermissionMode>>
 }
 
 export interface WorkspaceInfo {
@@ -78,9 +91,27 @@ export type AgentActivity =
   | { kind: 'generating'; chars?: number }
   | { kind: 'tool'; tool: string; target?: string; chars?: number }
 
+export interface ToolPermissionRequest {
+  id: string
+  conversationId: string
+  toolCallId: string
+  toolName: string
+  args: Record<string, unknown>
+  mode: Extract<ToolPermissionMode, 'ask'>
+  target?: string
+  reason: string
+  createdAt: number
+}
+
+export interface ToolPermissionResponse {
+  requestId: string
+  decision: ToolPermissionResponseDecision
+}
+
 export type StreamChunk =
   | { type: 'token'; text: string }
   | { type: 'tool_call'; call: ToolCall }
+  | { type: 'tool_permission'; request: ToolPermissionRequest }
   | { type: 'tool_result'; id: string; result?: string; error?: string }
   | { type: 'activity'; activity: AgentActivity }
   | { type: 'done' }
