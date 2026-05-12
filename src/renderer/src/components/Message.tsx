@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
-import type { AgentActivity, ChatMessage, ToolCall } from '@shared/types'
+import type {
+  AgentActivity,
+  ChatMessage,
+  ToolCall,
+  ToolPermissionResponseDecision
+} from '@shared/types'
 import gemmaLogoUrl from '../assets/gemma-logo.png'
 
 interface Props {
@@ -8,6 +13,10 @@ interface Props {
   isLast: boolean
   streaming: boolean
   onRegenerate?: () => void
+  onToolPermission?: (
+    requestId: string,
+    decision: ToolPermissionResponseDecision
+  ) => Promise<void>
 }
 
 interface Parsed {
@@ -35,7 +44,8 @@ function parseThinking(content: string): Parsed {
 export default function Message({
   message,
   streaming,
-  onRegenerate
+  onRegenerate,
+  onToolPermission
 }: Props) {
   const isUser = message.role === 'user'
   const parsed = useMemo(() => parseThinking(message.content), [message.content])
@@ -71,7 +81,9 @@ export default function Message({
           <ThinkingBlock content={parsed.thinking} inProgress={parsed.thinkingInProgress} />
         )}
 
-        {message.toolCalls?.map((tc) => <ToolCallView key={tc.id} call={tc} />)}
+        {message.toolCalls?.map((tc) => (
+          <ToolCallView key={tc.id} call={tc} onPermission={onToolPermission} />
+        ))}
 
         {!isEmpty && (
           <div
@@ -314,11 +326,42 @@ function toolIcon(name: string): string {
   }
 }
 
-function ToolCallView({ call }: { call: ToolCall }) {
+function ToolCallView({
+  call,
+  onPermission
+}: {
+  call: ToolCall
+  onPermission?: (
+    requestId: string,
+    decision: ToolPermissionResponseDecision
+  ) => Promise<void>
+}) {
   const [open, setOpen] = useState(false)
+  const [responding, setResponding] = useState<ToolPermissionResponseDecision | null>(null)
   const running = !!call.running
   const { verb, target } = toolLabel(call)
   const ico = toolIcon(call.name)
+  const permission = call.permission
+  const permissionPending = permission?.status === 'pending' && !!permission.requestId
+  const permissionLabel =
+    permission?.status === 'approved'
+      ? 'Approved'
+      : permission?.status === 'denied'
+        ? 'Denied'
+        : permissionPending
+          ? 'Permission required'
+          : ''
+
+  async function respond(decision: ToolPermissionResponseDecision): Promise<void> {
+    if (!permission?.requestId || !onPermission || responding) return
+    setResponding(decision)
+    try {
+      await onPermission(permission.requestId, decision)
+    } finally {
+      setResponding(null)
+    }
+  }
+
   return (
     <div className="mb-2 overflow-hidden rounded-lg border border-white/5 bg-white/[0.02]">
       <button
@@ -351,6 +394,19 @@ function ToolCallView({ call }: { call: ToolCall }) {
             <span className="truncate font-mono text-[11.5px] text-ink-400">{target}</span>
           )}
         </span>
+        {permissionLabel && (
+          <span
+            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] ${
+              permission?.status === 'denied'
+                ? 'bg-red-500/10 text-red-300'
+                : permission?.status === 'approved'
+                  ? 'bg-emerald-500/10 text-emerald-300'
+                  : 'bg-amber-500/10 text-amber-200'
+            }`}
+          >
+            {permissionLabel}
+          </span>
+        )}
         <svg
           viewBox="0 0 12 12"
           className={`h-2.5 w-2.5 shrink-0 text-ink-400 transition ${open ? 'rotate-90' : ''}`}
@@ -359,6 +415,32 @@ function ToolCallView({ call }: { call: ToolCall }) {
           <path d="M4 2l4 4-4 4V2z" />
         </svg>
       </button>
+      {permissionPending && (
+        <div className="border-t border-white/5 px-3 py-2">
+          <div className="min-w-0 text-[12px] leading-relaxed text-ink-300">
+            <div className="font-medium text-amber-100">Review tool access</div>
+            {permission.reason && (
+              <div className="mt-1 break-words text-ink-400">{permission.reason}</div>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => respond('allow')}
+              disabled={!!responding || !onPermission}
+              className="rounded-md bg-emerald-500/15 px-2.5 py-1 text-[12px] font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-default disabled:opacity-50"
+            >
+              {responding === 'allow' ? 'Approving…' : 'Approve'}
+            </button>
+            <button
+              onClick={() => respond('deny')}
+              disabled={!!responding || !onPermission}
+              className="rounded-md bg-red-500/15 px-2.5 py-1 text-[12px] font-medium text-red-200 transition hover:bg-red-500/25 disabled:cursor-default disabled:opacity-50"
+            >
+              {responding === 'deny' ? 'Denying…' : 'Deny'}
+            </button>
+          </div>
+        </div>
+      )}
       {open && (
         <div className="border-t border-white/5 px-3 py-2 font-mono text-[11.5px] text-ink-400">
           {call.name === 'write_file' && typeof call.args.content === 'string' ? (

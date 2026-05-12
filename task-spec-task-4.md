@@ -2,73 +2,57 @@
 
 ## Goal
 
-- 完成 Project feature 的整體驗收、狀態記錄與 Cortex project memory 補充，確認前面 tasks 的變更能通過 repository baseline verification。
+- 在 renderer chat UI 顯示 pending tool permission request，提供 approve / deny controls，並透過 preload API 回覆 main process，使 Task 3 的 ask flow 可以由使用者完成。
 
 ## Non-Goals
 
-- 不新增新的 product behavior。
-- 不重構已完成的 Project UI 或 workspace routing。
-- 不修改既有 unrelated Cortex dirty files。
+- 本 task 不新增 persisted permission settings。
+- 本 task 不設計全域 tool permission preference screen。
+- 本 task 不改變 main process permission evaluation policy。
+- 本 task 不實作多步記住選擇或 domain/path allowlist。
 
 ## Functional Spec
 
 - Input:
-  - 已完成的 Task 1 到 Task 3 commits。
-  - Repository verification commands。
-  - Cortex project memory rules。
+  - `tool_permission` stream chunk。
+  - Existing `tool_call` / `tool_result` chunks。
+  - User approve / deny click。
 - Output:
-  - `npm run typecheck` 與 `npm run build` 結果記錄。
-  - `project-status.md` 標記 Task 4 完成。
-  - Cortex wiki/log 新增 Project workspace 的 reusable understanding。
+  - Matching `ToolCall` records receive pending permission state.
+  - Tool card displays reason, target, and approve/deny buttons while permission is pending.
+  - User response calls `window.api.respondToToolPermission`.
+  - After tool result arrives, card displays approved/denied/final result state.
 - State Transitions:
-  - Project status Todo List 全部完成。
-  - Cortex nested repo 新增可供後續 agent retrieval 的 Project workspace concept page 與 workflow log。
+  - `tool_call` creates a running card.
+  - `tool_permission` marks the matching card as pending permission.
+  - User click locally marks the request as approved or denied.
+  - `tool_result` marks running false and shows result/error.
 - Rules:
-  - 不 stage unrelated source repo 或 Cortex repo dirty files。
-  - Cortex 新增內容使用繁體中文。
+  - Buttons only appear when permission status is pending.
+  - Long path/command/args must not break layout.
+  - Permission request should be visible without opening the details area.
 
 ## Constraints
 
-- Source project 與 Cortex nested repo 必須分開 commit。
-- 若 Cortex 既有檔案已 dirty，避免修改那些檔案以免混入他人變更。
-- Verification failure 必須記錄原因，不可假裝通過。
+- Keep renderer using `window.api`; no direct Electron/Node APIs.
+- Preserve existing `done` / `error` stream cleanup behavior.
+- UI should match existing dark tool card style and avoid nested cards.
+- Do not remove existing tool result detail expansion.
 
 ## Acceptance Criteria
 
-1. Given the implementation is complete
-   When `npm run typecheck` runs
-   Then it exits successfully.
-2. Given the implementation is complete
-   When `npm run build` runs
-   Then it exits successfully.
-3. Given Project feature adds reusable architecture knowledge
-   When Cortex memory is updated
-   Then a Project workspace page/log captures the behavior and code locators.
-4. Given project status is updated
-   When reading `project-status.md`
-   Then all planned tasks are checked complete with verification notes.
-
-# Harness Plan
-
-## 建議建立的護欄清單
-
-| AC 編號 | 護欄形式 | 工具 | 預期輸出 |
-|---|---|---|---|
-| AC-1 | Full typecheck | `npm run typecheck` | exit 0 |
-| AC-2 | Production build | `npm run build` | exit 0 |
-| AC-3 | Cortex file review | Markdown review | new concept page and log exist |
-| AC-4 | Status review | Markdown review | all todos complete and Task 4 log exists |
-
-## Domain Invariants
-
-- Verification must happen after implementation changes, not before.
-- Source repo commit must not include nested Cortex content.
-- Cortex commit must not include unrelated pre-existing dirty files.
-
-## Contract Tests
-
-- No new API contract is introduced in Task 4.
-
-## 快速執行命令
-
-- `npm run typecheck && npm run build`
+1. Given a `tool_permission` chunk for an existing tool call
+   When Chat reducer processes it
+   Then the matching `ToolCall` has pending permission state.
+2. Given a pending permission tool call
+   When the message renders
+   Then the tool card shows approval context and approve/deny controls.
+3. Given the user clicks approve
+   When renderer calls the preload API
+   Then it sends `{ requestId, decision: "allow" }` to main process.
+4. Given the user clicks deny
+   When renderer calls the preload API
+   Then it sends `{ requestId, decision: "deny" }` to main process.
+5. Given current renderer code
+   When `npm run typecheck:web` runs
+   Then the UI and preload contract compile.

@@ -4,6 +4,7 @@ import {
   type AgentMode,
   type ChatMessage,
   type ProjectRecord,
+  type ToolPermissionResponseDecision,
   type ToolCall,
   type StreamChunk
 } from '@shared/types'
@@ -399,6 +400,21 @@ export default function Chat({ model, onSwitchModel }: Props) {
                     : t
                 )
                 msgs[msgs.length - 1] = { ...last, toolCalls: tcs }
+              } else if (chunk.type === 'tool_permission') {
+                const tcs = (last.toolCalls ?? []).map((t) =>
+                  t.id === chunk.request.toolCallId
+                    ? {
+                        ...t,
+                        permission: {
+                          mode: 'ask' as const,
+                          requestId: chunk.request.id,
+                          status: 'pending' as const,
+                          reason: chunk.request.reason
+                        }
+                      }
+                    : t
+                )
+                msgs[msgs.length - 1] = { ...last, toolCalls: tcs }
               } else if (chunk.type === 'activity') {
                 msgs[msgs.length - 1] = { ...last, activity: chunk.activity }
               } else if (chunk.type === 'done') {
@@ -426,6 +442,33 @@ export default function Chat({ model, onSwitchModel }: Props) {
     streamRef.current.abort = true
     await window.api.abortChat(activeId)
     setStreaming(false)
+  }
+
+  async function handleToolPermission(
+    requestId: string,
+    decision: ToolPermissionResponseDecision
+  ): Promise<void> {
+    setChatState((state) => ({
+      ...state,
+      conversations: state.conversations.map((c) => ({
+        ...c,
+        messages: c.messages.map((m) => ({
+          ...m,
+          toolCalls: m.toolCalls?.map((t) =>
+            t.permission?.requestId === requestId
+              ? {
+                  ...t,
+                  permission: {
+                    ...t.permission,
+                    status: decision === 'allow' ? 'approved' : 'denied'
+                  }
+                }
+              : t
+          )
+        }))
+      }))
+    }))
+    await window.api.respondToToolPermission({ requestId, decision })
   }
 
   async function handleRegenerate(): Promise<void> {
@@ -477,6 +520,7 @@ export default function Chat({ model, onSwitchModel }: Props) {
             streaming={streaming}
             mode={activeConversation.mode}
             onRegenerate={handleRegenerate}
+            onToolPermission={handleToolPermission}
           />
           <Composer
             onSend={handleSend}
@@ -700,12 +744,17 @@ function MessageList({
   messages,
   streaming,
   mode,
-  onRegenerate
+  onRegenerate,
+  onToolPermission
 }: {
   messages: ChatMessage[]
   streaming: boolean
   mode: AgentMode
   onRegenerate: () => void
+  onToolPermission: (
+    requestId: string,
+    decision: ToolPermissionResponseDecision
+  ) => Promise<void>
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
@@ -745,6 +794,7 @@ function MessageList({
                     ? onRegenerate
                     : undefined
                 }
+                onToolPermission={onToolPermission}
               />
             </div>
           ))}

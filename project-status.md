@@ -3,7 +3,7 @@
 - [x] Task 1 - Define tool permission contracts and policy model
 - [x] Task 2 - Add workspace path classification and forced ask checks
 - [x] Task 3 - Gate tool execution in the main process
-- [ ] Task 4 - Render permission requests and user controls
+- [x] Task 4 - Render permission requests and user controls
 - [ ] Task 5 - Final verification and Cortex/status updates
 
 # Change Logs
@@ -64,3 +64,21 @@
 ### Notes
 
 已通過 `npm run typecheck:node` 與 `npm run typecheck:web`。Renderer 尚未顯示 permission request；Task 4 會接上 UI controls。
+
+## Task 4 - Render permission requests and user controls
+
+### Summary
+
+Renderer 現在會處理 `tool_permission` stream chunk，將 pending permission state 寫入 matching `ToolCall`，並在 tool card 上顯示 permission reason、status badge、Approve / Deny controls。使用者回覆會透過 `window.api.respondToToolPermission` 傳回 main process。
+
+### Changed Files
+
+- project-status.md
+- task-spec-task-4.md
+- harness-plan-task-4.md
+- src/renderer/src/components/Chat.tsx
+- src/renderer/src/components/Message.tsx
+
+### Notes
+
+已通過 `npm run typecheck:web`。Task 5 會跑完整 `npm run typecheck` 與 `npm run build`，並補必要 Cortex 記錄。
