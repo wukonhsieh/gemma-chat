@@ -6,7 +6,7 @@ import type {
   ToolCall,
   ToolPermissionResponseDecision
 } from '@shared/types'
-import gemmaLogoUrl from '../assets/gemma-logo.png'
+import gemmaLogoUrl from '../assets/gabie-smile.png'
 
 interface Props {
   message: ChatMessage

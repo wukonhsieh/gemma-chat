@@ -1,5 +1,5 @@
 import { AVAILABLE_MODELS, type SetupStatus } from '@shared/types'
-import gemmaLogoUrl from '../assets/gemma-logo.png'
+import gemmaLogoUrl from '../assets/gabie-smile.png'
 
 interface Props {
   status: SetupStatus

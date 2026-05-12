@@ -8,7 +8,7 @@ import {
   type ToolCall,
   type StreamChunk
 } from '@shared/types'
-import gemmaLogoUrl from '../assets/gemma-logo.png'
+import gemmaLogoUrl from '../assets/gabie-smile.png'
 import Composer from './Composer'
 import Message from './Message'
 import Sidebar from './Sidebar'
