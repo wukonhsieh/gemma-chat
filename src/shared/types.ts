@@ -144,20 +144,34 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
     description: 'Best all-rounder. Text + image + audio. Runs on 8GB+ Macs.',
     recommended: true
   },
+  // {
+  //   name: 'mlx-community/gemma-4-26b-a4b-it-4bit',
+  //   label: 'Gemma 4 27B MoE',
+  //   size: '16 GB',
+  //   sizeBytes: 16_000_000_000,
+  //   description: 'Mixture-of-Experts (26B, 4B active). 16GB+ RAM recommended.'
+  // },
   {
-    name: 'mlx-community/gemma-4-26b-a4b-it-4bit',
+    name: 'unsloth/gemma-4-26b-a4b-it-UD-MLX-4bit',
     label: 'Gemma 4 27B MoE',
-    size: '16 GB',
-    sizeBytes: 16_000_000_000,
+    size: '15 GB',
+    sizeBytes: 15_000_000_000,
     description: 'Mixture-of-Experts (26B, 4B active). 16GB+ RAM recommended.'
   },
+  // {
+  //   name: 'mlx-community/gemma-4-31b-it-4bit',
+  //   label: 'Gemma 4 31B',
+  //   size: '18 GB',
+  //   sizeBytes: 18_000_000_000,
+  //   description: 'Frontier dense model. Best quality. 32GB+ RAM recommended.'
+  // },
   {
-    name: 'mlx-community/gemma-4-31b-it-4bit',
+    name: 'unsloth/gemma-4-31b-it-UD-MLX-4bit',
     label: 'Gemma 4 31B',
-    size: '18 GB',
-    sizeBytes: 18_000_000_000,
+    size: '22 GB',
+    sizeBytes: 22_000_000_000,
     description: 'Frontier dense model. Best quality. 32GB+ RAM recommended.'
-  }
+  },
 ]
 
-export const DEFAULT_MODEL = 'mlx-community/gemma-4-e4b-it-4bit'
+export const DEFAULT_MODEL = 'unsloth/gemma-4-31b-it-UD-MLX-4bit'
