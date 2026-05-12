@@ -4,7 +4,7 @@
 - [x] Task 2 - Add workspace path classification and forced ask checks
 - [x] Task 3 - Gate tool execution in the main process
 - [x] Task 4 - Render permission requests and user controls
-- [ ] Task 5 - Final verification and Cortex/status updates
+- [x] Task 5 - Final verification and Cortex/status updates
 
 # Change Logs
 
@@ -82,3 +82,22 @@ Renderer 現在會處理 `tool_permission` stream chunk，將 pending permission
 ### Notes
 
 已通過 `npm run typecheck:web`。Task 5 會跑完整 `npm run typecheck` 與 `npm run build`，並補必要 Cortex 記錄。
+
+## Task 5 - Final verification and Cortex/status updates
+
+### Summary
+
+完成最終驗收，`npm run typecheck` 與 `npm run build` 皆通過。新增 Task 5 spec/harness，並在 Cortex nested repo 補充 Tool Permissions concept 與 workflow log，記錄 permission gate、workspace 外 forced ask、renderer approval flow 與後續修改 guidance。
+
+### Changed Files
+
+- project-status.md
+- task-spec-task-5.md
+- harness-plan-task-5.md
+- cortex/wiki/concepts/tool-permissions.md
+- cortex/wiki/index.md
+- cortex/wiki/logs/2026-05-12-tool-permissions.md
+
+### Notes
+
+Cortex lint 已通過。Source project 與 nested Cortex repo 需分開 commit；未追蹤的 agent bootstrap files 不屬於本 iteration commits。
