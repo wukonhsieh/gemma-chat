@@ -314,14 +314,18 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
     }
 
     // Lazy skill scan: run once per conversation on the first handleChat call.
+    // Skip when no project is open to avoid writing to the user home directory.
     let skillState = conversationSkillStates.get(req.conversationId)
     if (!skillState) {
-      const projectRoot = req.workspacePath ?? app.getPath('home')
-      try {
-        const lock = await scanSkills(projectRoot)
-        const { index } = await writeSkillArtifacts(projectRoot, lock)
-        skillState = { index, loadedSkills: {}, turnCount: 0 }
-      } catch {
+      if (req.workspacePath) {
+        try {
+          const lock = await scanSkills(req.workspacePath)
+          const { index } = await writeSkillArtifacts(req.workspacePath, lock)
+          skillState = { index, loadedSkills: {}, turnCount: 0 }
+        } catch {
+          skillState = { index: { skills: [] }, loadedSkills: {}, turnCount: 0 }
+        }
+      } else {
         skillState = { index: { skills: [] }, loadedSkills: {}, turnCount: 0 }
       }
       conversationSkillStates.set(req.conversationId, skillState)
