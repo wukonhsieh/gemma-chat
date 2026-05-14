@@ -152,7 +152,7 @@ export async function startWorkspaceServer(): Promise<number> {
       const parts = url.pathname.split('/').filter(Boolean)
       if (parts.length === 0) {
         res.writeHead(200, { 'content-type': 'text/plain' })
-        res.end('gemma-chat workspace server')
+        res.end('gabie workspace server')
         return
       }
       const id = parts[0]

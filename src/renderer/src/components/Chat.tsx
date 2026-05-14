@@ -37,8 +37,8 @@ interface ChatState {
   activeProjectId: string | null
 }
 
-const STATE_KEY = 'gemma-chat:state:v3'
-const LEGACY_CONVERSATIONS_KEY = 'gemma-chat:conversations:v2'
+const STATE_KEY = 'gabie:state:v3'
+const LEGACY_CONVERSATIONS_KEY = 'gabie:conversations:v2'
 
 function loadChatState(): ChatState {
   try {
