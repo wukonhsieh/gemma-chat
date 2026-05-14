@@ -42,8 +42,12 @@ export async function loadToolPermissionPolicy(): Promise<ToolPermissionPolicy> 
       return { ...DEFAULT_TOOL_PERMISSION_POLICY }
     }
     const config = defaultToolPermissionConfig()
-    await mkdir(dirname(path), { recursive: true })
-    await writeFile(path, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    try {
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(path, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    } catch (writeErr) {
+      console.warn('Failed to write tool permission config:', writeErr)
+    }
     return config.tools
   }
 }
