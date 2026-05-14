@@ -91,15 +91,15 @@ export async function scanSkills(projectRoot: string): Promise<SkillsLockFile> {
 
     const content = await readFile(skillMdPath, 'utf-8')
     const hash = sha256(content)
-    const existing = existingSkills[entry.name]
+    const { data } = parseFrontmatter(content)
+    const name = data.name ?? entry.name
+    const existing = existingSkills[name]
 
     if (existing && existing.sourceHash === hash) {
-      updatedSkills[entry.name] = existing
+      updatedSkills[name] = existing
       continue
     }
 
-    const { data } = parseFrontmatter(content)
-    const name = data.name ?? entry.name
     const description = data.description ?? ''
     const summary = data.summary ?? description
 
