@@ -39,6 +39,11 @@ import {
   type ToolPermissionPolicy,
   type ToolPermissionEvaluation
 } from './permissions'
+import { scanSkills } from './skills/scanner'
+import { writeSkillArtifacts } from './skills/indexer'
+import { detectSkillInvocation } from './skills/detector'
+import { loadSkill, type LoadedSkillsRegistry } from './skills/loader'
+import type { SkillIndex } from './skills/types'
 import type {
   ChatRequest,
   StreamChunk,
@@ -308,8 +313,55 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       baseMessages.push({ role: 'system', content: chatSystemPrompt(req.enableTools) })
     }
 
+    // Lazy skill scan: run once per conversation on the first handleChat call.
+    let skillState = conversationSkillStates.get(req.conversationId)
+    if (!skillState) {
+      const projectRoot = req.workspacePath ?? app.getPath('home')
+      try {
+        const lock = await scanSkills(projectRoot)
+        const { index } = await writeSkillArtifacts(projectRoot, lock)
+        skillState = { index, loadedSkills: {}, turnCount: 0 }
+      } catch {
+        skillState = { index: { skills: [] }, loadedSkills: {}, turnCount: 0 }
+      }
+      conversationSkillStates.set(req.conversationId, skillState)
+    }
+    skillState.turnCount++
+
+    // Detect explicit skill invocation in the latest user message.
+    const lastUserMsg = [...req.messages].reverse().find((m) => m.role === 'user')
+    let skillInjection: string | null = null
+    let skillError: string | null = null
+    let strippedLastUserContent: string | null = null
+
+    if (lastUserMsg) {
+      const { skillName, strippedMessage } = detectSkillInvocation(lastUserMsg.content)
+      if (skillName) {
+        strippedLastUserContent = strippedMessage || lastUserMsg.content
+        const result = await loadSkill(
+          skillName,
+          skillState.index,
+          skillState.loadedSkills,
+          skillState.turnCount
+        )
+        if (result.ok) {
+          skillInjection = result.content
+        } else {
+          skillError = result.reason
+        }
+      }
+    }
+
+    if (skillInjection) {
+      baseMessages.push({ role: 'system', content: skillInjection })
+    }
+
     for (const m of req.messages) {
-      baseMessages.push({ role: m.role as MLXChatMessage['role'], content: m.content })
+      const isLastUser = m === lastUserMsg && strippedLastUserContent !== null
+      baseMessages.push({
+        role: m.role as MLXChatMessage['role'],
+        content: isLastUser ? strippedLastUserContent! : m.content
+      })
       if (m.toolCalls) {
         for (const tc of m.toolCalls) {
           if (tc.result != null) {
@@ -320,6 +372,10 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
           }
         }
       }
+    }
+
+    if (skillError) {
+      emit({ type: 'token', text: `⚠️ ${skillError}\n\n` })
     }
 
     const ctx: ToolContext = {
@@ -642,6 +698,13 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 }
 
 const chatAbortControllers = new Map<string, AbortController>()
+
+interface ConversationSkillState {
+  index: SkillIndex
+  loadedSkills: LoadedSkillsRegistry
+  turnCount: number
+}
+const conversationSkillStates = new Map<string, ConversationSkillState>()
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.ammaar.gemmachat')
