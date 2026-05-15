@@ -82,10 +82,39 @@ function stripTags(s: string): string {
     .trim()
 }
 
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase()
+  if (h === 'localhost' || h === '0.0.0.0') return true
+  const stripped = h.startsWith('[') && h.endsWith(']') ? h.slice(1, -1) : h
+  if (stripped === '::1') return true
+  if (stripped.startsWith('::ffff:')) return true
+  const parts = stripped.split('.').map(Number)
+  if (parts.length === 4 && parts.every((n) => !isNaN(n) && n >= 0 && n <= 255)) {
+    const [a, b] = parts
+    if (
+      a === 0 || a === 10 || a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168)
+    ) return true
+  }
+  return false
+}
+
 async function fetchUrl(args: Record<string, unknown>): Promise<string> {
   const url = String(args.url ?? '').trim()
   if (!url) return 'Error: missing url'
   if (!/^https?:\/\//.test(url)) return 'Error: url must be http(s)'
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return 'Error: invalid URL'
+  }
+  if (isPrivateHost(parsed.hostname)) {
+    return 'Error: fetching localhost or private addresses is not allowed'
+  }
   try {
     const res = await fetch(url, { headers: { 'user-agent': UA } })
     if (!res.ok) return `Fetch failed: ${res.status} ${res.statusText}`
