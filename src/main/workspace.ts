@@ -422,7 +422,11 @@ export interface BashResult {
 }
 
 const BASH_DENY =
-  /\b(rm\s+-rf\s+\/|sudo|:\(\)\s*\{|chmod\s+777\s+\/|mkfs|dd\s+if=|shutdown|reboot)|\b(curl|wget|nc|ncat|netcat|socat|telnet)\b/i
+  /\b(rm\s+-rf\s+\/|sudo|chmod\s+777\s+\/|mkfs|dd\s+if=|shutdown|reboot)|:\(\)\s*\{|\b(curl|wget|nc|ncat|netcat|socat|telnet)\b/i
+
+export function isBashCommandDenied(command: string): boolean {
+  return BASH_DENY.test(command)
+}
 
 export async function wsRunBash(
   conversationId: string,
@@ -430,7 +434,7 @@ export async function wsRunBash(
   timeoutMs = 60000,
   maxBytes = 16000
 ): Promise<BashResult> {
-  if (BASH_DENY.test(command)) {
+  if (isBashCommandDenied(command)) {
     throw new Error('Blocked by safety policy: command contains a denied pattern.')
   }
   const base = await ensureWorkspace(conversationId)
