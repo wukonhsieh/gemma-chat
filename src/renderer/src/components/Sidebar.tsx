@@ -144,14 +144,6 @@ export default function Sidebar({
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
             Running locally
           </div>
-          <a
-            href="https://x.com/ammaar"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-ink-400/50 transition hover:text-ink-200"
-          >
-            @ammaar
-          </a>
         </div>
       </div>
     </div>
