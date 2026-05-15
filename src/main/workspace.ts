@@ -422,7 +422,7 @@ export interface BashResult {
 }
 
 const BASH_DENY =
-  /\b(rm\s+-rf\s+\/|sudo|:\(\)\s*\{|chmod\s+777\s+\/|mkfs|dd\s+if=|shutdown|reboot)/i
+  /\b(rm\s+-rf\s+\/|sudo|:\(\)\s*\{|chmod\s+777\s+\/|mkfs|dd\s+if=|shutdown|reboot)|\b(curl|wget|nc|ncat|netcat|socat|telnet)\b/i
 
 export async function wsRunBash(
   conversationId: string,

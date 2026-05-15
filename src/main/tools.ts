@@ -375,7 +375,7 @@ export const TOOLS: Record<string, ToolSpec> = {
   run_bash: {
     name: 'run_bash',
     description:
-      'Run a bash command inside the workspace directory. Use for npm install, git, formatters, quick checks.',
+      'Run a bash command inside the workspace directory. Use for npm install, git, formatters, quick checks. Commands must not access external networks or send data outside the workspace.',
     params: [
       { name: 'command', description: 'shell command', required: true, multiline: true }
     ],
