@@ -52,7 +52,7 @@ Most AI agent tools have large tool schemas that are too computationally heavy f
 ## Models Verification (Ongoing)
 
 | Model | Tools | Skills | Basic Security Check |
-|---|---|---|
+|---|---|---|---|
 | Gemma 4 E2B | -- | -- | -- |
 | Gemma 4 E4B | -- | -- | -- |
 | Gemma 4 27B MoE | -- | -- | -- |
