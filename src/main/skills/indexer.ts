@@ -2,6 +2,29 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import type { SkillsLockFile, SkillIndex, SkillIndexEntry, SkillUiEntry } from './types'
 
+function catalogLines(
+  skills: Array<{ name: string; type: string; risk: string; summary: string; triggers: string[] }>
+): string {
+  const lines: string[] = ['available_skills:']
+  for (const s of skills) {
+    lines.push(`  - name: ${s.name}`)
+    lines.push(`    type: ${s.type}`)
+    lines.push(`    risk: ${s.risk}`)
+    lines.push(`    summary: ${s.summary}`)
+    if (s.triggers.length > 0) {
+      lines.push(`    triggers:`)
+      for (const t of s.triggers) lines.push(`      - ${t}`)
+    }
+  }
+  lines.push('')
+  lines.push('rules:')
+  lines.push('  - Use a skill only if the user request clearly matches its summary or triggers.')
+  lines.push('  - Do not invent skill names.')
+  lines.push('  - If no skill matches, use no skill.')
+  lines.push('  - Hidden skills may exist but are not available for model invocation.')
+  return lines.join('\n')
+}
+
 export function buildSkillIndex(lock: SkillsLockFile): SkillIndex {
   const skills: SkillIndexEntry[] = Object.values(lock.skills).map((s) => ({
     name: s.name,
@@ -19,30 +42,11 @@ export function buildSkillIndex(lock: SkillsLockFile): SkillIndex {
 }
 
 export function buildSkillCatalog(lock: SkillsLockFile): string {
-  const skills = Object.values(lock.skills).filter((s) => s.modelInvocable)
-  const lines: string[] = ['available_skills:']
+  return catalogLines(Object.values(lock.skills).filter((s) => s.modelInvocable))
+}
 
-  for (const s of skills) {
-    lines.push(`  - name: ${s.name}`)
-    lines.push(`    type: ${s.type}`)
-    lines.push(`    risk: ${s.risk}`)
-    lines.push(`    summary: ${s.summary}`)
-    if (s.triggers.length > 0) {
-      lines.push(`    triggers:`)
-      for (const t of s.triggers) {
-        lines.push(`      - ${t}`)
-      }
-    }
-  }
-
-  lines.push('')
-  lines.push('rules:')
-  lines.push('  - Use a skill only if the user request clearly matches its summary or triggers.')
-  lines.push('  - Do not invent skill names.')
-  lines.push('  - If no skill matches, use no skill.')
-  lines.push('  - Hidden skills may exist but are not available for model invocation.')
-
-  return lines.join('\n')
+export function buildSkillCatalogFromIndex(index: SkillIndex): string {
+  return catalogLines(index.skills.filter((s) => s.modelInvocable))
 }
 
 export function buildSkillUiIndex(lock: SkillsLockFile): SkillUiEntry[] {

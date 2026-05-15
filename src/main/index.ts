@@ -40,7 +40,7 @@ import {
   type ToolPermissionEvaluation
 } from './permissions'
 import { scanAllSkills, type ScopeEntry } from './skills/scanner'
-import { writeSkillArtifacts } from './skills/indexer'
+import { writeSkillArtifacts, buildSkillCatalogFromIndex } from './skills/indexer'
 import { detectSkillInvocation } from './skills/detector'
 import { loadSkill, type LoadedSkillsRegistry } from './skills/loader'
 import type { SkillIndex } from './skills/types'
@@ -354,6 +354,12 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
     }
     skillState.turnCount++
 
+    // Inject available skill catalog so the model always knows which skills exist.
+    const modelInvocableSkills = skillState.index.skills.filter((s) => s.modelInvocable)
+    if (modelInvocableSkills.length > 0) {
+      baseMessages.push({ role: 'system', content: buildSkillCatalogFromIndex(skillState.index) })
+    }
+
     // Detect explicit skill invocation in the latest user message.
     const lastUserMsg = [...req.messages].reverse().find((m) => m.role === 'user')
     let skillInjection: string | null = null
@@ -378,16 +384,13 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       }
     }
 
-    if (skillInjection) {
-      baseMessages.push({ role: 'system', content: skillInjection })
-    }
-
     for (const m of req.messages) {
       const isLastUser = m === lastUserMsg && strippedLastUserContent !== null
-      baseMessages.push({
-        role: m.role as MLXChatMessage['role'],
-        content: isLastUser ? strippedLastUserContent! : m.content
-      })
+      let content = isLastUser ? strippedLastUserContent! : m.content
+      if (isLastUser && skillInjection) {
+        content = skillInjection + '\n\n---\n\n' + content
+      }
+      baseMessages.push({ role: m.role as MLXChatMessage['role'], content })
       if (m.toolCalls) {
         for (const tc of m.toolCalls) {
           if (tc.result != null) {

@@ -41,6 +41,9 @@ export async function loadSkill(
 
   loadedSkills[skillName] = { sourceHash: entry.sourceHash, loadedAtTurn: currentTurn }
 
-  const header = `The following skill has been selected and loaded.\n\nSkill name: ${skillName}\nSkill version: ${entry.sourceHash}\n\n`
+  const header =
+    `[SKILL ACTIVATED: ${skillName}]\n` +
+    `You MUST follow the instructions below for this response. ` +
+    `They override your default behavior for this turn.\n\n`
   return { ok: true, skillName, content: header + skillContent }
 }
