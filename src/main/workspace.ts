@@ -427,8 +427,8 @@ const BASH_DENY =
 export async function wsRunBash(
   conversationId: string,
   command: string,
-  timeoutMs = 60_000,
-  maxBytes = 16_000
+  timeoutMs = 60000,
+  maxBytes = 16000
 ): Promise<BashResult> {
   if (BASH_DENY.test(command)) {
     throw new Error('Blocked by safety policy: command contains a denied pattern.')

@@ -13,10 +13,6 @@ interface Props {
   isLast: boolean
   streaming: boolean
   onRegenerate?: () => void
-  onToolPermission?: (
-    requestId: string,
-    decision: ToolPermissionResponseDecision
-  ) => Promise<void>
 }
 
 interface Parsed {
@@ -41,12 +37,7 @@ function parseThinking(content: string): Parsed {
   return { thinking, thinkingInProgress: false, visible: (before + rest).trim() }
 }
 
-export default function Message({
-  message,
-  streaming,
-  onRegenerate,
-  onToolPermission
-}: Props) {
+export default function Message({ message, streaming, onRegenerate }: Props) {
   const isUser = message.role === 'user'
   const parsed = useMemo(() => parseThinking(message.content), [message.content])
   const html = useMemo(() => {
@@ -82,7 +73,7 @@ export default function Message({
         )}
 
         {message.toolCalls?.map((tc) => (
-          <ToolCallView key={tc.id} call={tc} onPermission={onToolPermission} />
+          <ToolCallView key={tc.id} call={tc} />
         ))}
 
         {!isEmpty && (
@@ -326,18 +317,8 @@ function toolIcon(name: string): string {
   }
 }
 
-function ToolCallView({
-  call,
-  onPermission
-}: {
-  call: ToolCall
-  onPermission?: (
-    requestId: string,
-    decision: ToolPermissionResponseDecision
-  ) => Promise<void>
-}) {
+function ToolCallView({ call }: { call: ToolCall }) {
   const [open, setOpen] = useState(false)
-  const [responding, setResponding] = useState<ToolPermissionResponseDecision | null>(null)
   const running = !!call.running
   const { verb, target } = toolLabel(call)
   const ico = toolIcon(call.name)
@@ -351,16 +332,6 @@ function ToolCallView({
         : permissionPending
           ? 'Permission required'
           : ''
-
-  async function respond(decision: ToolPermissionResponseDecision): Promise<void> {
-    if (!permission?.requestId || !onPermission || responding) return
-    setResponding(decision)
-    try {
-      await onPermission(permission.requestId, decision)
-    } finally {
-      setResponding(null)
-    }
-  }
 
   return (
     <div className="mb-2 overflow-hidden rounded-lg border border-white/5 bg-white/[0.02]">
@@ -415,32 +386,6 @@ function ToolCallView({
           <path d="M4 2l4 4-4 4V2z" />
         </svg>
       </button>
-      {permissionPending && (
-        <div className="border-t border-white/5 px-3 py-2">
-          <div className="min-w-0 text-[12px] leading-relaxed text-ink-300">
-            <div className="font-medium text-amber-100">Review tool access</div>
-            {permission.reason && (
-              <div className="mt-1 break-words text-ink-400">{permission.reason}</div>
-            )}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => respond('allow')}
-              disabled={!!responding || !onPermission}
-              className="rounded-md bg-emerald-500/15 px-2.5 py-1 text-[12px] font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-default disabled:opacity-50"
-            >
-              {responding === 'allow' ? 'Approving…' : 'Approve'}
-            </button>
-            <button
-              onClick={() => respond('deny')}
-              disabled={!!responding || !onPermission}
-              className="rounded-md bg-red-500/15 px-2.5 py-1 text-[12px] font-medium text-red-200 transition hover:bg-red-500/25 disabled:cursor-default disabled:opacity-50"
-            >
-              {responding === 'deny' ? 'Denying…' : 'Deny'}
-            </button>
-          </div>
-        </div>
-      )}
       {open && (
         <div className="border-t border-white/5 px-3 py-2 font-mono text-[11.5px] text-ink-400">
           {call.name === 'write_file' && typeof call.args.content === 'string' ? (
@@ -472,4 +417,62 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+export function PermissionBanner({
+  call,
+  onPermission
+}: {
+  call: ToolCall
+  onPermission: (requestId: string, decision: ToolPermissionResponseDecision) => Promise<void>
+}) {
+  const [responding, setResponding] = useState<ToolPermissionResponseDecision | null>(null)
+  const { verb, target } = toolLabel(call)
+  const ico = toolIcon(call.name)
+  const permission = call.permission
+
+  if (!permission?.requestId || permission.status !== 'pending') return null
+
+  async function respond(decision: ToolPermissionResponseDecision): Promise<void> {
+    if (!permission?.requestId || responding) return
+    setResponding(decision)
+    try {
+      await onPermission(permission.requestId, decision)
+    } finally {
+      setResponding(null)
+    }
+  }
+
+  return (
+    <div className="mx-6 mb-2 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="shrink-0 font-mono text-[15px] text-amber-300">{ico}</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] font-semibold text-amber-100">Permission required</div>
+          <div className="mt-0.5 truncate font-mono text-[11.5px] text-ink-400">
+            {verb}{target ? ` ${target}` : ''}
+          </div>
+          {permission.reason && (
+            <div className="mt-0.5 text-[11.5px] text-ink-400">{permission.reason}</div>
+          )}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button
+            onClick={() => respond('allow')}
+            disabled={!!responding}
+            className="rounded-md bg-emerald-500/15 px-3 py-1.5 text-[12px] font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-default disabled:opacity-50"
+          >
+            {responding === 'allow' ? 'Approving…' : 'Approve'}
+          </button>
+          <button
+            onClick={() => respond('deny')}
+            disabled={!!responding}
+            className="rounded-md bg-red-500/15 px-3 py-1.5 text-[12px] font-medium text-red-200 transition hover:bg-red-500/25 disabled:cursor-default disabled:opacity-50"
+          >
+            {responding === 'deny' ? 'Denying…' : 'Deny'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
