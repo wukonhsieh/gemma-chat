@@ -1,4 +1,5 @@
 import { readFile } from 'fs/promises'
+import { dirname } from 'path'
 import type { SkillIndex, SkillLoadResult } from './types'
 
 export interface LoadedSkillsRegistry {
@@ -41,8 +42,10 @@ export async function loadSkill(
 
   loadedSkills[skillName] = { sourceHash: entry.sourceHash, loadedAtTurn: currentTurn }
 
+  const skillDir = dirname(entry.path)
   const header =
     `[SKILL ACTIVATED: ${skillName}]\n` +
+    `Base directory for this skill: ${skillDir}\n` +
     `You MUST follow the instructions below for this response. ` +
     `They override your default behavior for this turn.\n\n`
   return { ok: true, skillName, content: header + skillContent }
