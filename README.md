@@ -1,26 +1,26 @@
 <p align="center">
-  <img src="gemma-extruded-app.png" alt="Gabie" width="180" />
+  <img src="assets/gabie-smile.png" alt="Gabie" width="180" />
 </p>
 
 <h1 align="center">Gabie</h1>
 
 <p align="center">
-  <strong>你身邊的 AI 小幫手。</strong><br/>
-  一個使用 local LLM 的極輕量 Agent 工具，可調用 Tools、Skills、MVC，幫你處理日常雜事。<br/>
+  <strong>Your personal AI assistant.</strong><br/>
+  An ultra-lightweight agent tool powered by a local LLM. Invokes Tools and Skills to help with everyday tasks.<br/>
   No API keys. No cloud. No Wi-Fi required.
 </p>
 
+## What is this?
+
+Gabie is a fork of [gemma_chat](https://github.com/ammaarreshi/gemma-chat-public), with the goal of becoming a local-LLM-powered agent assistant.
+
+Most AI agent tools have large tool schemas that are too computationally heavy for simple tasks and not well-suited for small local LLMs. This project aims to be an ultra-lightweight AI agent tool that invokes Tools and Skills to help with everyday tasks — your always-available personal assistant.
+
 ---
 
-> **注意：** local LLM 會出錯。本專案計劃對可使用的模型做基本安全性測試，在那之前請小心使用。目前有基本存取限制 & 限制存取 project 資料夾，但完成完整測試前先謹慎使用。
+> **Note:** Small LLMs make mistakes. This project plans to conduct basic safety testing on supported models; until then, please use with caution. Basic access controls and project folder restrictions are in place, but use carefully until full testing is complete.
 
 ---
-
-## 這是什麼？
-
-Gabie 是從 [gemma_chat](https://github.com/ammaarreshi/gemma-chat-public) fork 出來的專案，目標是成為一個使用 local LLM 的 Agent 小幫手。
-
-由於多數的 Agent IDE 的 tool schema 過大，不適合 local 小型 LLM 使用，這個專案希望能成為一個極輕量的 LLM Agent Tool，可以調用 Tools、Skills、MVC，幫助處理日常雜事，是你身邊的小幫手。
 
 <img width="960" height="593" alt="Gabie screenshot" src="https://github.com/user-attachments/assets/b4149e63-48df-456e-8007-c607b7d46f37" />
 
@@ -42,13 +42,29 @@ Gabie 是從 [gemma_chat](https://github.com/ammaarreshi/gemma-chat-public) fork
 | Gemma 4 27B MoE | ~8 GB | Stronger reasoning (needs 16 GB+ RAM) |
 | Gemma 4 31B | ~18 GB | Maximum quality (needs 32 GB+ RAM) |
 
+## Security
+
+- Tool permissions
+- Restricted access to project folder contents
+- Blocklist for unsafe web fetch targets
+- Verify with some security tests (ongoing)
+
+## Models Verification (Ongoing)
+
+| Model | Tools | Skills | Basic Security Check |
+|---|---|---|
+| Gemma 4 E2B | -- | -- | -- |
+| Gemma 4 E4B | -- | -- | -- |
+| Gemma 4 27B MoE | -- | -- | -- |
+| Gemma 4 31B | -- | -- | -- |
+
 ## Getting Started
 
 **Requirements:** macOS on Apple Silicon, Python 3.10–3.14, Node 20+.
 
 ```bash
-git clone https://github.com/ammaarreshi/gemma-chat-public.git
-cd gemma-chat-public
+git clone https://github.com/wukonhsieh/gemma-chat.git
+cd gemma-chat
 npm install
 npm run dev
 ```
