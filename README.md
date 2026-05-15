@@ -47,16 +47,17 @@ Most AI agent tools have large tool schemas that are too computationally heavy f
 - Tool permissions
 - Restricted access to project folder contents
 - Blocklist for unsafe web fetch targets
-- Verify with some security tests (ongoing)
+- Verify with some security tests (Total 78 tests, including bash-injection, path-traversal, ssrf and llm-adversarial)
 
 ## Models Verification (Ongoing)
 
-| Model | Tools | Skills | Basic Security Check |
+| Model | Tools | Skills | Security Check |
 |---|---|---|---|
-| Gemma 4 E2B | -- | -- | -- |
-| Gemma 4 E4B | -- | -- | -- |
-| Gemma 4 27B MoE | -- | -- | -- |
-| Gemma 4 31B | -- | -- | -- |
+| Gemma 4 E2B | -- | -- | Test Files 4/4 passed / Tests 78/78 passed |
+| Gemma 4 E4B | -- | -- | Test Files 4/4 passed / Tests 78/78 passed |
+| Gemma 4 27B MoE | -- | (still not good..) | Test Files 4/4 passed / Tests 78/78 passed |
+| Gemma 4 31B | GOOD | GOOD | Test Files 4/4 passed / Tests 78/78 passed |
+| (more models in the future ...) | -- | -- | -- |
 
 ## Getting Started
 
