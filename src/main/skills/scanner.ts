@@ -65,9 +65,11 @@ async function loadLockFile(lockPath: string): Promise<SkillsLockFile | null> {
   }
 }
 
-export async function scanSkills(projectRoot: string): Promise<SkillsLockFile> {
-  const skillsRoot = join(projectRoot, '.agents', 'skills')
-  const cacheDir = join(projectRoot, '.agents', 'cache')
+async function scanSkillsAt(
+  skillsRoot: string,
+  cacheDir: string,
+  scope: SkillMetadata['scope']
+): Promise<SkillsLockFile> {
   const lockPath = join(cacheDir, 'skills.lock.json')
 
   const cached = await loadLockFile(lockPath)
@@ -112,7 +114,7 @@ export async function scanSkills(projectRoot: string): Promise<SkillsLockFile> {
       risk: data.risk ?? 'low',
       triggers: data.triggers ?? [],
       type: data.type ?? 'unknown',
-      scope: 'project',
+      scope,
       path: skillMdPath,
       sourceHash: hash
     }
@@ -127,4 +129,32 @@ export async function scanSkills(projectRoot: string): Promise<SkillsLockFile> {
   await mkdir(cacheDir, { recursive: true })
   await writeFile(lockPath, JSON.stringify(lock, null, 2), 'utf-8')
   return lock
+}
+
+export async function scanSkills(projectRoot: string): Promise<SkillsLockFile> {
+  return scanSkillsAt(
+    join(projectRoot, '.agents', 'skills'),
+    join(projectRoot, '.agents', 'cache'),
+    'project'
+  )
+}
+
+export interface ScopeEntry {
+  scope: SkillMetadata['scope']
+  root: string
+  cacheRoot: string
+}
+
+export async function scanAllSkills(scopes: ScopeEntry[]): Promise<SkillsLockFile> {
+  const results = await Promise.all(
+    scopes.map(({ scope, root, cacheRoot }) => scanSkillsAt(root, cacheRoot, scope))
+  )
+  // Merge in reverse so higher-priority scopes (earlier in array) overwrite lower-priority
+  const merged: Record<string, SkillMetadata> = {}
+  for (const lock of [...results].reverse()) {
+    for (const [name, meta] of Object.entries(lock.skills)) {
+      merged[name] = meta
+    }
+  }
+  return { version: 1, generatedAt: new Date().toISOString(), skills: merged }
 }

@@ -39,7 +39,7 @@ import {
   type ToolPermissionPolicy,
   type ToolPermissionEvaluation
 } from './permissions'
-import { scanSkills } from './skills/scanner'
+import { scanAllSkills, type ScopeEntry } from './skills/scanner'
 import { writeSkillArtifacts } from './skills/indexer'
 import { detectSkillInvocation } from './skills/detector'
 import { loadSkill, type LoadedSkillsRegistry } from './skills/loader'
@@ -314,18 +314,40 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
     }
 
     // Lazy skill scan: run once per conversation on the first handleChat call.
-    // Skip when no project is open to avoid writing to the user home directory.
+    // Scans project (if open) → global (~/.agents/skills) → builtin (app resources/skills).
     let skillState = conversationSkillStates.get(req.conversationId)
     if (!skillState) {
-      if (req.workspacePath) {
-        try {
-          const lock = await scanSkills(req.workspacePath)
-          const { index } = await writeSkillArtifacts(req.workspacePath, lock)
-          skillState = { index, loadedSkills: {}, turnCount: 0 }
-        } catch {
-          skillState = { index: { skills: [] }, loadedSkills: {}, turnCount: 0 }
+      try {
+        const homeDir = app.getPath('home')
+        const userDataDir = app.getPath('userData')
+        const builtinRoot = is.dev
+          ? join(app.getAppPath(), 'resources', 'skills')
+          : join(process.resourcesPath, 'skills')
+
+        const scopes: ScopeEntry[] = []
+        if (req.workspacePath) {
+          scopes.push({
+            scope: 'project',
+            root: join(req.workspacePath, '.agents', 'skills'),
+            cacheRoot: join(req.workspacePath, '.agents', 'cache')
+          })
         }
-      } else {
+        scopes.push({
+          scope: 'global',
+          root: join(homeDir, '.agents', 'skills'),
+          cacheRoot: join(homeDir, '.agents', 'cache')
+        })
+        scopes.push({
+          scope: 'builtin',
+          root: builtinRoot,
+          cacheRoot: join(userDataDir, '.agents', 'cache', 'builtin')
+        })
+
+        const artifactRoot = req.workspacePath ?? userDataDir
+        const lock = await scanAllSkills(scopes)
+        const { index } = await writeSkillArtifacts(artifactRoot, lock)
+        skillState = { index, loadedSkills: {}, turnCount: 0 }
+      } catch {
         skillState = { index: { skills: [] }, loadedSkills: {}, turnCount: 0 }
       }
       conversationSkillStates.set(req.conversationId, skillState)
