@@ -38,8 +38,8 @@ Most AI agent tools have large tool schemas that are too computationally heavy f
 | Model | Size | Best For |
 |---|---|---|
 | Gemma 4 E2B | ~1.5 GB | Fast Q&A, simple tasks |
-| **Gemma 4 E4B** | **~3 GB** | **Recommended.** Speed + capability balance |
-| Gemma 4 27B MoE | ~8 GB | Stronger reasoning (needs 16 GB+ RAM) |
+| Gemma 4 E4B | ~3 GB | Speed, but not capable to execude skills |
+| **Gemma 4 27B MoE** | **~8 GB** | **Recommended.** Stronger reasoning and able to execute skills (needs 16 GB+ RAM) |
 | Gemma 4 31B | ~18 GB | Maximum quality (needs 32 GB+ RAM) |
 
 ## Security
@@ -51,13 +51,15 @@ Most AI agent tools have large tool schemas that are too computationally heavy f
 
 ## Models Verification (Ongoing)
 
-| Model | Tools | Skills | Security Check |
+| Model | Tools Ability | Skills Ability | Security Tests |
 |---|---|---|---|
 | Gemma 4 E2B | -- | -- | Test Files 4/4 passed / Tests 78/78 passed |
-| Gemma 4 E4B | -- | -- | Test Files 4/4 passed / Tests 78/78 passed |
-| Gemma 4 27B MoE | -- | (still not good..) | Test Files 4/4 passed / Tests 78/78 passed |
-| Gemma 4 31B | GOOD | GOOD | Test Files 4/4 passed / Tests 78/78 passed |
+| Gemma 4 E4B | ★☆☆☆☆ | ☆☆☆☆☆ | Test Files 4/4 passed / Tests 78/78 passed |
+| Gemma 4 27B MoE | ★★★★☆ | ★★★☆☆ | Test Files 4/4 passed / Tests 78/78 passed |
+| Gemma 4 31B | ★★★★☆ | ★★★★☆ | Test Files 4/4 passed / Tests 78/78 passed |
 | (more models in the future ...) | -- | -- | -- |
+
+* Smaller model might cut corners, and unable to find some files.
 
 ## Getting Started
 
