@@ -10,7 +10,7 @@ import {
 } from '@shared/types'
 import gemmaLogoUrl from '../assets/gabie-smile.png'
 import Composer from './Composer'
-import Message from './Message'
+import Message, { PermissionBanner } from './Message'
 import Sidebar from './Sidebar'
 import Canvas from './Canvas'
 
@@ -37,8 +37,8 @@ interface ChatState {
   activeProjectId: string | null
 }
 
-const STATE_KEY = 'gemma-chat:state:v3'
-const LEGACY_CONVERSATIONS_KEY = 'gemma-chat:conversations:v2'
+const STATE_KEY = 'gabie:state:v3'
+const LEGACY_CONVERSATIONS_KEY = 'gabie:conversations:v2'
 
 function loadChatState(): ChatState {
   try {
@@ -491,6 +491,15 @@ export default function Chat({ model, onSwitchModel }: Props) {
     (activeConversation.mode === 'code' || activeConversation.canvasOpen === true) &&
     activeConversation.canvasOpen !== false
 
+  const pendingPermissionCall = useMemo(() => {
+    for (const m of activeConversation.messages) {
+      for (const tc of m.toolCalls ?? []) {
+        if (tc.permission?.status === 'pending' && tc.permission.requestId) return tc
+      }
+    }
+    return null
+  }, [activeConversation.messages])
+
   return (
     <div className="flex h-full w-full">
       <Sidebar
@@ -520,8 +529,10 @@ export default function Chat({ model, onSwitchModel }: Props) {
             streaming={streaming}
             mode={activeConversation.mode}
             onRegenerate={handleRegenerate}
-            onToolPermission={handleToolPermission}
           />
+          {pendingPermissionCall && (
+            <PermissionBanner call={pendingPermissionCall} onPermission={handleToolPermission} />
+          )}
           <Composer
             onSend={handleSend}
             onStop={handleStop}
@@ -744,17 +755,12 @@ function MessageList({
   messages,
   streaming,
   mode,
-  onRegenerate,
-  onToolPermission
+  onRegenerate
 }: {
   messages: ChatMessage[]
   streaming: boolean
   mode: AgentMode
   onRegenerate: () => void
-  onToolPermission: (
-    requestId: string,
-    decision: ToolPermissionResponseDecision
-  ) => Promise<void>
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
@@ -794,7 +800,6 @@ function MessageList({
                     ? onRegenerate
                     : undefined
                 }
-                onToolPermission={onToolPermission}
               />
             </div>
           ))}

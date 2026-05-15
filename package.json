@@ -1,7 +1,7 @@
 {
-  "name": "gemma-chat",
+  "name": "gabie",
   "version": "0.1.0",
-  "description": "Local AI chat on your Mac, powered by Gemma 3",
+  "description": "A lightweight local LLM agent assistant — your personal AI helper powered by local models",
   "main": "./out/main/index.js",
   "author": "Ammaar",
   "license": "MIT",

@@ -30,6 +30,24 @@ export default function Composer({
   const chunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
   const timerRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      if (mediaRef.current && mediaRef.current.state !== 'inactive') {
+        mediaRef.current.stop()
+      }
+      mediaRef.current = null
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     const el = taRef.current
@@ -68,6 +86,7 @@ export default function Composer({
         const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' })
         streamRef.current?.getTracks().forEach((t) => t.stop())
         streamRef.current = null
+        if (!mountedRef.current) return
         if (blob.size < 500) {
           setRecState('idle')
           setRecordSeconds(0)

@@ -152,7 +152,7 @@ export async function startWorkspaceServer(): Promise<number> {
       const parts = url.pathname.split('/').filter(Boolean)
       if (parts.length === 0) {
         res.writeHead(200, { 'content-type': 'text/plain' })
-        res.end('gemma-chat workspace server')
+        res.end('gabie workspace server')
         return
       }
       const id = parts[0]
@@ -422,13 +422,13 @@ export interface BashResult {
 }
 
 const BASH_DENY =
-  /\b(rm\s+-rf\s+\/|sudo|:\(\)\s*\{|chmod\s+777\s+\/|mkfs|dd\s+if=|shutdown|reboot)/i
+  /\b(rm\s+-rf\s+\/|sudo|:\(\)\s*\{|chmod\s+777\s+\/|mkfs|dd\s+if=|shutdown|reboot)|\b(curl|wget|nc|ncat|netcat|socat|telnet)\b/i
 
 export async function wsRunBash(
   conversationId: string,
   command: string,
-  timeoutMs = 60_000,
-  maxBytes = 16_000
+  timeoutMs = 60000,
+  maxBytes = 16000
 ): Promise<BashResult> {
   if (BASH_DENY.test(command)) {
     throw new Error('Blocked by safety policy: command contains a denied pattern.')

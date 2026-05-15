@@ -82,10 +82,39 @@ function stripTags(s: string): string {
     .trim()
 }
 
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase()
+  if (h === 'localhost' || h === '0.0.0.0') return true
+  const stripped = h.startsWith('[') && h.endsWith(']') ? h.slice(1, -1) : h
+  if (stripped === '::1') return true
+  if (stripped.startsWith('::ffff:')) return true
+  const parts = stripped.split('.').map(Number)
+  if (parts.length === 4 && parts.every((n) => !isNaN(n) && n >= 0 && n <= 255)) {
+    const [a, b] = parts
+    if (
+      a === 0 || a === 10 || a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168)
+    ) return true
+  }
+  return false
+}
+
 async function fetchUrl(args: Record<string, unknown>): Promise<string> {
   const url = String(args.url ?? '').trim()
   if (!url) return 'Error: missing url'
   if (!/^https?:\/\//.test(url)) return 'Error: url must be http(s)'
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return 'Error: invalid URL'
+  }
+  if (isPrivateHost(parsed.hostname)) {
+    return 'Error: fetching localhost or private addresses is not allowed'
+  }
   try {
     const res = await fetch(url, { headers: { 'user-agent': UA } })
     if (!res.ok) return `Fetch failed: ${res.status} ${res.statusText}`
@@ -346,7 +375,7 @@ export const TOOLS: Record<string, ToolSpec> = {
   run_bash: {
     name: 'run_bash',
     description:
-      'Run a bash command inside the workspace directory. Use for npm install, git, formatters, quick checks.',
+      'Run a bash command inside the workspace directory. Use for npm install, git, formatters, quick checks. Commands must not access external networks or send data outside the workspace.',
     params: [
       { name: 'command', description: 'shell command', required: true, multiline: true }
     ],
@@ -413,7 +442,7 @@ export function chatSystemPrompt(enableTools: boolean): string {
     '',
     'TOOL USE',
     '========',
-    'When a tool helps, emit ONE action block and STOP. You will receive the result, then you may continue or call another tool.',
+    'When a tool helps, emit ONE action block and STOP. You will receive the result in a <tool_result> block, then you may continue or call another tool.',
     '',
     'Action format:',
     '<action name="tool_name">',
@@ -461,7 +490,7 @@ export function codeSystemPrompt(workspacePath: string, previewHref: string): st
     '',
     'HOW YOU WORK',
     '1. For clear build requests, start with ONE sentence describing your plan (e.g., "I\'ll split this into index.html, style.css, and app.js."). Then IMMEDIATELY emit your first write_file action in the SAME response. Do NOT stop after planning — start building right away.',
-    '2. After each action, STOP and wait for the result. In subsequent turns, one sentence of narration (e.g., "Now the stylesheet."), then the action, then STOP.',
+    '2. After each action, STOP and wait for the result. The result arrives in a <tool_result> block. In subsequent turns, one sentence of narration (e.g., "Now the stylesheet."), then the action, then STOP.',
     '3. After all files are written, call `open_preview`, then write a one-sentence plain-text summary. Emit no further actions.',
     '',
     'CRITICAL FOR BUILD REQUESTS: You MUST emit a write_file action in your VERY FIRST response. Never respond with only a plan or description. Always start coding immediately.',

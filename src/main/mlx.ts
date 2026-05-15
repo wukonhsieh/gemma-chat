@@ -312,6 +312,7 @@ export async function startServer(
   currentModel = model
 
   serverProc.stdout?.on('data', (d) => console.log('[mlx]', d.toString().trim()))
+  let progressDone = false
   serverProc.stderr?.on('data', (d) => {
     const text = d.toString()
     stderrBuf += text
@@ -319,7 +320,7 @@ export async function startServer(
 
     // Parse HuggingFace download progress from stderr
     // Format: "Fetching 8 files:  50%|█████     | 4/8 [00:55<00:59, 14.98s/it]"
-    if (onProgress) {
+    if (onProgress && !progressDone) {
       const lines = text.split('\n')
       for (const line of lines) {
         // Match "Fetching N files: XX%" pattern
@@ -335,8 +336,7 @@ export async function startServer(
           continue
         }
 
-        // Match loading messages
-        if (line.includes('Starting httpd') || line.includes('starting')) {
+        if (line.includes('Starting httpd')) {
           onProgress({ message: 'Starting server…', progress: 1.0 })
         }
       }
@@ -352,6 +352,7 @@ export async function startServer(
   // Wait for the server to become healthy.
   // First run downloads model weights from HuggingFace, so allow up to 10 min.
   await waitForHealth(600_000, () => earlyExit)
+  progressDone = true
 }
 
 export function stopServer(): void {

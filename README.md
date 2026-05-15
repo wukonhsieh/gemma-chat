@@ -1,41 +1,34 @@
 <p align="center">
-  <img src="gemma-extruded-app.png" alt="Gemma Chat" width="180" />
+  <img src="assets/gabie-smile.png" alt="Gabie" width="180" />
 </p>
 
-<h1 align="center">Gemma Chat</h1>
+<h1 align="center">Gabie</h1>
 
 <p align="center">
-  <strong>Vibe code without the internet.</strong><br/>
-  A local coding agent powered by Google's Gemma 4 — runs entirely on your Mac via Apple's MLX framework.<br/>
+  <strong>Your personal AI assistant.</strong><br/>
+  An ultra-lightweight agent tool powered by a local LLM. Invokes Tools and Skills to help with everyday tasks.<br/>
   No API keys. No cloud. No Wi-Fi required.
 </p>
 
+## What is this?
+
+Gabie is a fork of [gemma_chat](https://github.com/ammaarreshi/gemma-chat-public), with the goal of becoming a local-LLM-powered agent assistant.
+
+Most AI agent tools have large tool schemas that are too computationally heavy for simple tasks and not well-suited for small local LLMs. This project aims to be an ultra-lightweight AI agent tool that invokes Tools and Skills to help with everyday tasks — your always-available personal assistant.
+
 ---
 
-<img width="960" height="593" alt="Gemma4-Vibecoding" src="https://github.com/user-attachments/assets/b4149e63-48df-456e-8007-c607b7d46f37" />
+> **Note:** Small LLMs make mistakes. This project plans to conduct basic safety testing on supported models; until then, please use with caution. Basic access controls and project folder restrictions are in place, but use carefully until full testing is complete.
 
+---
 
-## The Idea
-
-What if you could vibe code from an airplane? Or a cabin with no cell signal? Or just... without sending your code to someone else's server?
-
-**Gemma Chat** is an open-source Electron app that runs Gemma 4 natively on Apple Silicon. You describe what you want to build, and it writes the code — HTML, CSS, JavaScript, multi-file projects — with a live preview that updates as the model types. No internet connection needed after the initial model download.
-
-It's a proof-of-concept for **fully offline, local-first vibe coding** using a small open model. The model is ~3 GB. The whole thing runs on your laptop.
-
-## How It Works
-
-1. **Describe what you want to build** — "A retro calculator app" or "A landing page for a coffee shop"
-2. **Watch it code** — Gemma writes files character-by-character with a live preview
-3. **Iterate** — Ask for changes, it edits the files and the preview updates in real-time
-
-Everything happens locally. The model runs via [MLX-VLM](https://github.com/ml-explore/mlx-examples/tree/main/llms/mlx_vlm), Apple's framework for running local multimodal and language models on Apple Silicon. Your code, your prompts, your conversations — all on your machine.
+<img width="960" height="593" alt="Gabie screenshot" src="https://github.com/user-attachments/assets/b4149e63-48df-456e-8007-c607b7d46f37" />
 
 ## Features
 
 - 🛠 **Build Mode** — Coding agent with a live preview canvas. Writes multi-file projects into a sandboxed workspace.
 - 💬 **Chat Mode** — Conversational AI with tool use (web search, URL fetch, calculator, bash).
-- 🔄 **Model Switching** — Hot-swap between 4 Gemma variants on the fly.
+- 🔄 **Model Switching** — Hot-swap between Gemma variants on the fly.
 - 🎤 **Voice Input** — Local speech-to-text via in-browser Whisper.
 - ✈️ **Works Offline** — After the one-time model download, everything runs without internet.
 - 💾 **Zero Config** — Python venv + MLX runtime auto-provisions on first launch.
@@ -49,20 +42,34 @@ Everything happens locally. The model runs via [MLX-VLM](https://github.com/ml-e
 | Gemma 4 27B MoE | ~8 GB | Stronger reasoning (needs 16 GB+ RAM) |
 | Gemma 4 31B | ~18 GB | Maximum quality (needs 32 GB+ RAM) |
 
+## Security
+
+- Tool permissions
+- Restricted access to project folder contents
+- Blocklist for unsafe web fetch targets
+- Verify with some security tests (ongoing)
+
+## Models Verification (Ongoing)
+
+| Model | Tools | Skills | Basic Security Check |
+|---|---|---|
+| Gemma 4 E2B | -- | -- | -- |
+| Gemma 4 E4B | -- | -- | -- |
+| Gemma 4 27B MoE | -- | -- | -- |
+| Gemma 4 31B | -- | -- | -- |
+
 ## Getting Started
 
 **Requirements:** macOS on Apple Silicon, Python 3.10–3.14, Node 20+.
 
 ```bash
-git clone https://github.com/ammaarreshi/gemma-chat-public.git
-cd gemma-chat-public
+git clone https://github.com/wukonhsieh/gemma-chat.git
+cd gemma-chat
 npm install
 npm run dev
 ```
 
-First launch will auto-detect Python → create a venv → install MLX-VLM → download the model (~3 GB) → ready to vibe code.
-
-> **Tip:** Install Python via Homebrew if you don't have it, or point the app at a Miniforge Python 3.14 env such as `/opt/homebrew/Caskroom/miniforge/base/envs/env_314/bin/python`.
+First launch will auto-detect Python → create a venv → install MLX-VLM → download the model (~3 GB) → ready to go.
 
 ### Building a Distributable
 
@@ -70,7 +77,7 @@ First launch will auto-detect Python → create a venv → install MLX-VLM → d
 npm run dist
 ```
 
-Produces a signed `.dmg` in `dist/`. Share it directly — recipients just drag to Applications.
+Produces a signed `.dmg` in `dist/`.
 
 ## Tech Stack
 
@@ -103,31 +110,12 @@ src/
 └── shared/types.ts    IPC types + model registry
 ```
 
-### Under the Hood
-
-**Agent Loop** — In Build mode, each assistant turn streams tokens from the local MLX server. XML `<action>` blocks are parsed from the stream, executed (file writes, bash commands, etc.), and results are fed back for the next turn. Up to 40 rounds per user message.
-
-**Live Streaming** — As the model generates file content, partial writes are flushed to disk every ~450ms. The preview iframe reloads in real-time so you watch the page build itself.
-
-**Tool Protocol** — Small models handle XML more reliably than JSON function calling, so tools are invoked via an XML-based format:
-
-```xml
-<action name="write_file">
-<path>index.html</path>
-<content>
-<!doctype html>
-...
-</content>
-</action>
-```
-
 ## Credits
 
+- [gemma_chat](https://github.com/ammaarreshi/gemma-chat-public) by [@ammaar](https://x.com/ammaar) — the upstream project this is forked from
 - [Gemma](https://ai.google.dev/gemma) by Google DeepMind
 - [MLX](https://github.com/ml-explore/mlx) by Apple Machine Learning Research
 - [transformers.js](https://github.com/huggingface/transformers.js) by Hugging Face
-
-Created by [@ammaar](https://x.com/ammaar) and AI :) 
 
 ## License
 

@@ -39,6 +39,11 @@ import {
   type ToolPermissionPolicy,
   type ToolPermissionEvaluation
 } from './permissions'
+import { scanAllSkills, type ScopeEntry } from './skills/scanner'
+import { writeSkillArtifacts, buildSkillCatalogFromIndex } from './skills/indexer'
+import { detectSkillInvocation } from './skills/detector'
+import { loadSkill, type LoadedSkillsRegistry } from './skills/loader'
+import type { SkillIndex } from './skills/types'
 import type {
   ChatRequest,
   StreamChunk,
@@ -308,18 +313,98 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       baseMessages.push({ role: 'system', content: chatSystemPrompt(req.enableTools) })
     }
 
+    // Lazy skill scan: run once per conversation on the first handleChat call.
+    // Scans project (if open) → global (~/.agents/skills) → builtin (app resources/skills).
+    let skillState = conversationSkillStates.get(req.conversationId)
+    if (!skillState) {
+      try {
+        const homeDir = app.getPath('home')
+        const userDataDir = app.getPath('userData')
+        const builtinRoot = is.dev
+          ? join(app.getAppPath(), 'resources', 'skills')
+          : join(process.resourcesPath, 'skills')
+
+        const scopes: ScopeEntry[] = []
+        if (req.workspacePath) {
+          scopes.push({
+            scope: 'project',
+            root: join(req.workspacePath, '.agents', 'skills'),
+            cacheRoot: join(req.workspacePath, '.agents', 'cache')
+          })
+        }
+        scopes.push({
+          scope: 'global',
+          root: join(homeDir, '.agents', 'skills'),
+          cacheRoot: join(homeDir, '.agents', 'cache')
+        })
+        scopes.push({
+          scope: 'builtin',
+          root: builtinRoot,
+          cacheRoot: join(userDataDir, '.agents', 'cache', 'builtin')
+        })
+
+        const artifactRoot = req.workspacePath ?? userDataDir
+        const lock = await scanAllSkills(scopes)
+        const { index } = await writeSkillArtifacts(artifactRoot, lock)
+        skillState = { index, loadedSkills: {}, turnCount: 0 }
+      } catch {
+        skillState = { index: { skills: [] }, loadedSkills: {}, turnCount: 0 }
+      }
+      conversationSkillStates.set(req.conversationId, skillState)
+    }
+    skillState.turnCount++
+
+    // Inject available skill catalog so the model always knows which skills exist.
+    const modelInvocableSkills = skillState.index.skills.filter((s) => s.modelInvocable)
+    if (modelInvocableSkills.length > 0) {
+      baseMessages.push({ role: 'system', content: buildSkillCatalogFromIndex(skillState.index) })
+    }
+
+    // Detect explicit skill invocation in the latest user message.
+    const lastUserMsg = [...req.messages].reverse().find((m) => m.role === 'user')
+    let skillInjection: string | null = null
+    let skillError: string | null = null
+    let strippedLastUserContent: string | null = null
+
+    if (lastUserMsg) {
+      const { skillName, strippedMessage } = detectSkillInvocation(lastUserMsg.content)
+      if (skillName) {
+        strippedLastUserContent = strippedMessage || lastUserMsg.content
+        const result = await loadSkill(
+          skillName,
+          skillState.index,
+          skillState.loadedSkills,
+          skillState.turnCount
+        )
+        if (result.ok) {
+          skillInjection = result.content
+        } else {
+          skillError = result.reason
+        }
+      }
+    }
+
     for (const m of req.messages) {
-      baseMessages.push({ role: m.role as MLXChatMessage['role'], content: m.content })
+      const isLastUser = m === lastUserMsg && strippedLastUserContent !== null
+      let content = isLastUser ? strippedLastUserContent! : m.content
+      if (isLastUser && skillInjection) {
+        content = skillInjection + '\n\n---\n\n' + content
+      }
+      baseMessages.push({ role: m.role as MLXChatMessage['role'], content })
       if (m.toolCalls) {
         for (const tc of m.toolCalls) {
           if (tc.result != null) {
             baseMessages.push({
-              role: 'tool',
-              content: `Result of <action name="${tc.name}">: ${tc.result}`
+              role: 'user',
+              content: `<tool_result name="${tc.name}" status="ok">\n${tc.result}\n</tool_result>`
             })
           }
         }
       }
+    }
+
+    if (skillError) {
+      emit({ type: 'token', text: `⚠️ ${skillError}\n\n` })
     }
 
     const ctx: ToolContext = {
@@ -569,8 +654,8 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 
             baseMessages.push({ role: 'assistant', content: buffer.slice(0, emittedIdx) })
             baseMessages.push({
-              role: 'tool',
-              content: `[${hadError ? 'error' : 'ok'}] ${found.name}: ${result}`
+              role: 'user',
+              content: `<tool_result name="${found.name}" status="${hadError ? 'error' : 'ok'}">\n${result}\n</tool_result>`
             })
             executedAction = true
             if (livePath) {
@@ -642,6 +727,13 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 }
 
 const chatAbortControllers = new Map<string, AbortController>()
+
+interface ConversationSkillState {
+  index: SkillIndex
+  loadedSkills: LoadedSkillsRegistry
+  turnCount: number
+}
+const conversationSkillStates = new Map<string, ConversationSkillState>()
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.ammaar.gemmachat')
