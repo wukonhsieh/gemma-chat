@@ -313,10 +313,16 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       baseMessages.push({ role: 'system', content: chatSystemPrompt(req.enableTools) })
     }
 
-    // Lazy skill scan: run once per conversation on the first handleChat call.
+    // Skill scan: runs on first handleChat, and re-runs whenever workspacePath changes
+    // (e.g. user links a project mid-conversation) or the previous scan failed.
     // Scans project (if open) → global (~/.agents/skills) → builtin (app resources/skills).
-    let skillState = conversationSkillStates.get(req.conversationId)
-    if (!skillState) {
+    const cachedSkillState = conversationSkillStates.get(req.conversationId)
+    let skillState: ConversationSkillState
+    if (cachedSkillState && cachedSkillState.scannedWorkspacePath === req.workspacePath) {
+      skillState = cachedSkillState
+    } else {
+      const prevLoadedSkills = cachedSkillState?.loadedSkills ?? {}
+      const prevTurnCount = cachedSkillState?.turnCount ?? 0
       try {
         const homeDir = app.getPath('home')
         const userDataDir = app.getPath('userData')
@@ -346,11 +352,14 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
         const artifactRoot = req.workspacePath ?? userDataDir
         const lock = await scanAllSkills(scopes)
         const { index } = await writeSkillArtifacts(artifactRoot, lock)
-        skillState = { index, loadedSkills: {}, turnCount: 0 }
+        skillState = { index, loadedSkills: prevLoadedSkills, turnCount: prevTurnCount, scannedWorkspacePath: req.workspacePath }
+        conversationSkillStates.set(req.conversationId, skillState)
       } catch {
-        skillState = { index: { skills: [] }, loadedSkills: {}, turnCount: 0 }
+        // Don't cache a failed scan — mark scannedWorkspacePath as undefined so the next
+        // turn will retry. Use an empty index for the current turn only.
+        skillState = { index: { skills: [] }, loadedSkills: prevLoadedSkills, turnCount: prevTurnCount, scannedWorkspacePath: undefined }
+        conversationSkillStates.set(req.conversationId, skillState)
       }
-      conversationSkillStates.set(req.conversationId, skillState)
     }
     skillState.turnCount++
 
@@ -358,6 +367,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
     const modelInvocableSkills = skillState.index.skills.filter((s) => s.modelInvocable)
     if (modelInvocableSkills.length > 0) {
       baseMessages.push({ role: 'system', content: buildSkillCatalogFromIndex(skillState.index) })
+      console.log(`>>>> skill index: ${buildSkillCatalogFromIndex(skillState.index)}`);
     }
 
     // Detect explicit skill invocation in the latest user message.
@@ -732,6 +742,8 @@ interface ConversationSkillState {
   index: SkillIndex
   loadedSkills: LoadedSkillsRegistry
   turnCount: number
+  /** workspacePath used in the last successful scan; undefined means re-scan is needed */
+  scannedWorkspacePath: string | undefined
 }
 const conversationSkillStates = new Map<string, ConversationSkillState>()
 
