@@ -56,10 +56,10 @@ Most AI agent tools have large tool schemas that are too computationally heavy f
 
 ## Security Design
 
--[x] Add tool permissions
--[x] Restricted access to project folder contents
--[x] Blocklist for unsafe web fetch targets
--[x] Verify with some security tests (Total 78 tests, including bash-injection, path-traversal, ssrf and llm-adversarial)
+- [x] Add tool permissions
+- [x] Restricted access to project folder contents
+- [x] Blocklist for unsafe web fetch targets
+- [x] Verify with some security tests (Total 78 tests, including bash-injection, path-traversal, ssrf and llm-adversarial)
 
 ## Getting Started
 
