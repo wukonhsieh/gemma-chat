@@ -65,7 +65,7 @@ Most AI agent tools have large tool schemas that are too computationally heavy f
 
 ```bash
 git clone https://github.com/wukonhsieh/gabie.git
-cd gemma-chat
+cd gabie
 npm install
 npm run dev
 ```
