@@ -63,7 +63,7 @@ Most AI agent tools have large tool schemas that are too computationally heavy f
 **Requirements:** macOS on Apple Silicon, Python 3.10–3.14, Node 20+.
 
 ```bash
-git clone https://github.com/wukonhsieh/gemma-chat.git
+git clone https://github.com/wukonhsieh/gabie.git
 cd gemma-chat
 npm install
 npm run dev
