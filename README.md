@@ -42,13 +42,6 @@ Most AI agent tools have large tool schemas that are too computationally heavy f
 | **Gemma 4 27B MoE** | **~8 GB** | **Recommended.** Stronger reasoning and able to execute skills (needs 16 GB+ RAM) |
 | Gemma 4 31B | ~18 GB | Maximum quality (needs 32 GB+ RAM) |
 
-## Security
-
-- Tool permissions
-- Restricted access to project folder contents
-- Blocklist for unsafe web fetch targets
-- Verify with some security tests (Total 78 tests, including bash-injection, path-traversal, ssrf and llm-adversarial)
-
 ## Models Verification (Ongoing)
 
 | Model | Tools Ability | Skills Ability | Security Tests |
@@ -60,6 +53,13 @@ Most AI agent tools have large tool schemas that are too computationally heavy f
 | (more models in the future ...) | -- | -- | -- |
 
 * Smaller model might cut corners, and unable to find some files.
+
+## Security Design
+
+-[x] Add tool permissions
+-[x] Restricted access to project folder contents
+-[x] Blocklist for unsafe web fetch targets
+-[x] Verify with some security tests (Total 78 tests, including bash-injection, path-traversal, ssrf and llm-adversarial)
 
 ## Getting Started
 
