@@ -29,6 +29,7 @@ import {
   previewUrl,
   listTree,
   workspaceDir,
+  workspacesRoot,
   wsWriteFile,
   registerConversationWorkspace,
   classifyWorkspacePath
@@ -36,6 +37,7 @@ import {
 import {
   evaluateToolPermission,
   loadToolPermissionPolicy,
+  saveToolPermission,
   type ToolPermissionPolicy,
   type ToolPermissionEvaluation
 } from './permissions'
@@ -44,13 +46,16 @@ import { writeSkillArtifacts, buildSkillCatalogFromIndex } from './skills/indexe
 import { detectSkillInvocation } from './skills/detector'
 import { loadSkill, type LoadedSkillsRegistry } from './skills/loader'
 import type { SkillIndex } from './skills/types'
-import type {
-  ChatRequest,
-  StreamChunk,
-  ToolCall,
-  ToolPermissionRequest,
-  ToolPermissionResponse,
-  ToolPermissionResponseDecision
+import {
+  SETTINGS_CHANNELS,
+  type ChatRequest,
+  type StreamChunk,
+  type ToolCall,
+  type ToolInfo,
+  type ToolPermissionRequest,
+  type ToolPermissionResponse,
+  type ToolPermissionResponseDecision,
+  type ToolPermissionValue
 } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
@@ -843,6 +848,28 @@ app.whenReady().then(async () => {
       mode: t.mode
     }))
   })
+
+  ipcMain.handle(SETTINGS_CHANNELS.GET_TOOL_LIST, async (): Promise<ToolInfo[]> => {
+    return Object.values(TOOLS).map((t) => ({ name: t.name, description: t.description }))
+  })
+
+  ipcMain.handle(SETTINGS_CHANNELS.GET_WORKSPACE_ROOT, async (): Promise<string> => {
+    return workspacesRoot()
+  })
+
+  ipcMain.handle(
+    SETTINGS_CHANNELS.GET_PERMISSIONS,
+    async (): Promise<Record<string, ToolPermissionValue>> => {
+      return loadToolPermissionPolicy() as Promise<Record<string, ToolPermissionValue>>
+    }
+  )
+
+  ipcMain.handle(
+    SETTINGS_CHANNELS.SET_PERMISSION,
+    async (_e, { tool, value }: { tool: string; value: ToolPermissionValue }): Promise<void> => {
+      await saveToolPermission(tool, value)
+    }
+  )
 
   ipcMain.handle('tool-permission:respond', async (_e, response: ToolPermissionResponse) => {
     return { ok: resolveToolPermission(response) }

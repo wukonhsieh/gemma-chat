@@ -76,6 +76,21 @@ function normalizeToolPermissionConfig(value: unknown): ToolPermissionConfig {
   return { tools }
 }
 
+export async function saveToolPermission(tool: string, value: ToolPermissionMode): Promise<void> {
+  const path = toolPermissionConfigPath()
+  let raw: unknown = {}
+  try {
+    raw = JSON.parse(await readFile(path, 'utf-8'))
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+  }
+  const config = normalizeToolPermissionConfig(raw)
+  config.tools[tool] = value
+  const merged = { ...(typeof raw === 'object' && raw !== null ? raw : {}), tools: config.tools }
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, JSON.stringify(merged, null, 2) + '\n', 'utf-8')
+}
+
 export function evaluateToolPermission(
   toolName: string,
   policy: ToolPermissionPolicy = DEFAULT_TOOL_PERMISSION_POLICY

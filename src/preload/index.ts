@@ -1,11 +1,14 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
-import type {
-  ChatRequest,
-  SetupStatus,
-  StreamChunk,
-  ToolPermissionResponse,
-  WorkspaceInfo,
-  WorkspaceFile
+import {
+  SETTINGS_CHANNELS,
+  type ChatRequest,
+  type SetupStatus,
+  type StreamChunk,
+  type ToolInfo,
+  type ToolPermissionResponse,
+  type ToolPermissionValue,
+  type WorkspaceInfo,
+  type WorkspaceFile
 } from '../shared/types'
 
 const api = {
@@ -90,7 +93,19 @@ const api = {
   },
 
   transcribeAudio: (base64: string, model: string): Promise<{ text: string }> =>
-    ipcRenderer.invoke('audio:transcribe', { base64, model })
+    ipcRenderer.invoke('audio:transcribe', { base64, model }),
+
+  settingsGetToolList: (): Promise<ToolInfo[]> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.GET_TOOL_LIST),
+
+  settingsGetWorkspaceRoot: (): Promise<string> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.GET_WORKSPACE_ROOT),
+
+  settingsGetPermissions: (): Promise<Record<string, ToolPermissionValue>> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.GET_PERMISSIONS),
+
+  settingsSetPermission: (tool: string, value: ToolPermissionValue): Promise<void> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.SET_PERMISSION, { tool, value })
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['test/security/**/*.test.ts'],
+    include: ['test/**/*.test.ts'],
     testTimeout: 30_000,
     pool: 'threads',
     alias: {
