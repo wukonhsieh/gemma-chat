@@ -443,6 +443,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       // Live-write state for write_file streaming
       let livePath: string | null = null
       let liveContentStart = -1
+      let liveMarker: string | null = null
       let lastLiveWrite = 0
       let livePending: Promise<unknown> | null = null
       let lastEmittedContent = ''
@@ -450,7 +451,17 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
         if (!livePath || liveContentStart < 0 || livePending) return
         let partial = buffer.slice(liveContentStart)
         if (partial.startsWith('\n')) partial = partial.slice(1)
-        const closeIdx = partial.indexOf('</content>')
+        // Find content terminator: heredoc MARKER on its own line, or legacy </content>
+        let closeIdx = -1
+        if (liveMarker) {
+          const re = new RegExp(`(?:^|\\n)${liveMarker}(?:\\n|$)`)
+          const m = partial.match(re)
+          if (m && m.index !== undefined) {
+            closeIdx = m[0].startsWith('\n') ? m.index : m.index
+          }
+        } else {
+          closeIdx = partial.indexOf('</content>')
+        }
         if (closeIdx >= 0) partial = partial.slice(0, closeIdx)
         const cleaned = cleanFileContent(partial, livePath)
         if (cleaned !== lastEmittedContent) {
@@ -512,33 +523,46 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
           })
 
           // Detect if we've started an action (for activity label + live writes)
-          if (!pendingAction) {
-            const openMatch = buffer
-              .slice(emittedIdx)
-              .match(/<action\s+name\s*=\s*["']?([a-zA-Z_][\w]*)["']?\s*>/i)
-            if (openMatch) {
-              const name = openMatch[1]
-              const rest = buffer.slice(emittedIdx + (openMatch.index ?? 0))
-              const pathM = rest.match(/<path>([^<]+?)<\/path>/i)
-              const urlM = rest.match(/<url>([^<]+?)<\/url>/i)
-              const qM = rest.match(/<query>([^<]+?)<\/query>/i)
-              const cmdM = rest.match(/<command>([^<\n]+)/i)
-              pendingAction = {
-                name,
-                target: pathM?.[1] || urlM?.[1] || qM?.[1] || cmdM?.[1]
-              }
-            }
-          } else if (!pendingAction.target) {
-            const rest = buffer.slice(emittedIdx)
+          const extractTarget = (rest: string): string | undefined => {
+            // Heredoc: `path: value` or `url: value` etc.
+            const heredocKv =
+              rest.match(/(?:^|\n)path[ \t]*:[ \t]*([^\n]+)/i) ||
+              rest.match(/(?:^|\n)url[ \t]*:[ \t]*([^\n]+)/i) ||
+              rest.match(/(?:^|\n)query[ \t]*:[ \t]*([^\n]+)/i) ||
+              rest.match(/(?:^|\n)command[ \t]*:[ \t]*([^\n]+)/i)
+            if (heredocKv) return heredocKv[1].trim()
+            // Legacy XML: <path>value</path>
             const pathM = rest.match(/<path>([^<]+?)<\/path>/i)
             const urlM = rest.match(/<url>([^<]+?)<\/url>/i)
             const qM = rest.match(/<query>([^<]+?)<\/query>/i)
             const cmdM = rest.match(/<command>([^<\n]+)/i)
-            const t = pathM?.[1] || urlM?.[1] || qM?.[1] || cmdM?.[1]
+            return pathM?.[1] || urlM?.[1] || qM?.[1] || cmdM?.[1]
+          }
+          if (!pendingAction) {
+            const slice = buffer.slice(emittedIdx)
+            // Heredoc: `@@<tool_name>\n` at start of line
+            const hereOpen = slice.match(/(?:^|\n)@@([a-zA-Z_][\w]*)[ \t]*\n/)
+            if (hereOpen && hereOpen[1] !== 'end') {
+              const name = hereOpen[1]
+              const restStart = (hereOpen.index ?? 0) + hereOpen[0].length
+              const rest = slice.slice(restStart)
+              pendingAction = { name, target: extractTarget(rest) }
+            } else {
+              // Legacy XML
+              const openMatch = slice.match(
+                /<action\s+name\s*=\s*["']?([a-zA-Z_][\w]*)["']?\s*>/i
+              )
+              if (openMatch) {
+                const rest = slice.slice(openMatch.index ?? 0)
+                pendingAction = { name: openMatch[1], target: extractTarget(rest) }
+              }
+            }
+          } else if (!pendingAction.target) {
+            const t = extractTarget(buffer.slice(emittedIdx))
             if (t) pendingAction.target = t
           }
 
-          // Live write_file streaming — create/update the file as <content> grows
+          // Live write_file streaming — create/update the file as content grows
           if (pendingAction?.name === 'write_file' && pendingAction.target && !livePath) {
             const livePermission = evaluateActionPermission(
               req,
@@ -551,8 +575,16 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
             }
           }
           if (livePath && liveContentStart < 0) {
-            const idx = buffer.indexOf('<content>')
-            if (idx >= 0) liveContentStart = idx + '<content>'.length
+            // Heredoc: `content <<MARKER\n` — capture MARKER and set start after \n
+            const hereMatch = buffer.match(/(?:^|\n)content[ \t]+<<([a-zA-Z_][\w]*)[ \t]*\n/)
+            if (hereMatch && hereMatch.index !== undefined) {
+              liveMarker = hereMatch[1]
+              liveContentStart = hereMatch.index + hereMatch[0].length
+            } else {
+              // Legacy XML
+              const idx = buffer.indexOf('<content>')
+              if (idx >= 0) liveContentStart = idx + '<content>'.length
+            }
           }
           if (livePath && liveContentStart >= 0) {
             const now = Date.now()
@@ -684,6 +716,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
             pendingAction = null
             livePath = null
             liveContentStart = -1
+            liveMarker = null
             lastEmittedContent = ''
             emit({ type: 'activity', activity: { kind: 'thinking', chars: 0 } })
             // Break out of the current stream — we need to start a new

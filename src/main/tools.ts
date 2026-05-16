@@ -299,8 +299,7 @@ export const TOOLS: Record<string, ToolSpec> = {
     name: 'web_search',
     description: 'Search the web via DuckDuckGo. Returns a numbered list of results.',
     params: [{ name: 'query', description: 'what to search for', required: true }],
-    example:
-      '<action name="web_search">\n<query>latest tensorflow release notes</query>\n</action>',
+    example: '@@web_search\nquery: latest tensorflow release notes\n@@end',
     mode: 'both',
     run: webSearch
   },
@@ -308,7 +307,7 @@ export const TOOLS: Record<string, ToolSpec> = {
     name: 'fetch_url',
     description: 'Fetch a web page and return its text content (truncated to ~8KB).',
     params: [{ name: 'url', description: 'absolute http(s) URL', required: true }],
-    example: '<action name="fetch_url">\n<url>https://example.com</url>\n</action>',
+    example: '@@fetch_url\nurl: https://example.com\n@@end',
     mode: 'both',
     run: fetchUrl
   },
@@ -316,7 +315,7 @@ export const TOOLS: Record<string, ToolSpec> = {
     name: 'calc',
     description: 'Evaluate a numeric expression.',
     params: [{ name: 'expression', description: 'math expression', required: true }],
-    example: '<action name="calc">\n<expression>2 + 2 * 3</expression>\n</action>',
+    example: '@@calc\nexpression: 2 + 2 * 3\n@@end',
     mode: 'both',
     run: calc
   },
@@ -329,7 +328,7 @@ export const TOOLS: Record<string, ToolSpec> = {
       { name: 'content', description: 'full file text', required: true, multiline: true }
     ],
     example:
-      '<action name="write_file">\n<path>index.html</path>\n<content>\n<!doctype html>\n<html>\n<body>Hello</body>\n</html>\n</content>\n</action>',
+      '@@write_file\npath: index.html\ncontent <<EOF\n<!doctype html>\n<html>\n<body>Hello</body>\n</html>\nEOF\n@@end',
     mode: 'code',
     run: writeFile
   },
@@ -337,14 +336,14 @@ export const TOOLS: Record<string, ToolSpec> = {
     name: 'read_file',
     description: 'Read a file from the workspace.',
     params: [{ name: 'path', description: 'path relative to workspace', required: true }],
-    example: '<action name="read_file">\n<path>index.html</path>\n</action>',
+    example: '@@read_file\npath: index.html\n@@end',
     mode: 'code',
     run: readFile
   },
   edit_file: {
     name: 'edit_file',
     description:
-      'Replace a snippet in an existing file. old_string must appear exactly once, or pass <replace_all>true</replace_all>.',
+      'Replace a snippet in an existing file. old_string must appear exactly once, or set replace_all: true.',
     params: [
       { name: 'path', description: 'file path', required: true },
       { name: 'old_string', description: 'exact text to find', required: true, multiline: true },
@@ -352,7 +351,7 @@ export const TOOLS: Record<string, ToolSpec> = {
       { name: 'replace_all', description: 'true to replace every occurrence' }
     ],
     example:
-      '<action name="edit_file">\n<path>index.html</path>\n<old_string>Hello</old_string>\n<new_string>Hello, world</new_string>\n</action>',
+      '@@edit_file\npath: index.html\nold_string <<OLD\nHello\nOLD\nnew_string <<NEW\nHello, world\nNEW\n@@end',
     mode: 'code',
     run: editFile
   },
@@ -360,7 +359,7 @@ export const TOOLS: Record<string, ToolSpec> = {
     name: 'list_files',
     description: 'List every file in the workspace.',
     params: [],
-    example: '<action name="list_files"></action>',
+    example: '@@list_files\n@@end',
     mode: 'code',
     run: listFiles
   },
@@ -368,7 +367,7 @@ export const TOOLS: Record<string, ToolSpec> = {
     name: 'delete_file',
     description: 'Delete a file or directory from the workspace.',
     params: [{ name: 'path', description: 'path to delete', required: true }],
-    example: '<action name="delete_file">\n<path>old.html</path>\n</action>',
+    example: '@@delete_file\npath: old.html\n@@end',
     mode: 'code',
     run: deleteFile
   },
@@ -379,7 +378,7 @@ export const TOOLS: Record<string, ToolSpec> = {
     params: [
       { name: 'command', description: 'shell command', required: true, multiline: true }
     ],
-    example: '<action name="run_bash">\n<command>ls -la</command>\n</action>',
+    example: '@@run_bash\ncommand: ls -la\n@@end',
     mode: 'code',
     run: runBash
   },
@@ -388,7 +387,7 @@ export const TOOLS: Record<string, ToolSpec> = {
     description:
       'Reveal the Canvas preview. Call after creating or updating index.html so the user sees the result.',
     params: [],
-    example: '<action name="open_preview"></action>',
+    example: '@@open_preview\n@@end',
     mode: 'code',
     run: openPreview
   }
@@ -413,8 +412,8 @@ function renderToolHelp(mode: 'chat' | 'code'): string {
       lines.push('Parameters:')
       for (const p of t.params) {
         const req = p.required ? ' (required)' : ''
-        const multi = p.multiline ? ' — multi-line OK' : ''
-        lines.push(`  <${p.name}>: ${p.description}${req}${multi}`)
+        const multi = p.multiline ? ' — use heredoc' : ''
+        lines.push(`  ${p.name}: ${p.description}${req}${multi}`)
       }
     } else {
       lines.push('No parameters.')
@@ -444,15 +443,21 @@ export function chatSystemPrompt(enableTools: boolean): string {
     '========',
     'When a tool helps, emit ONE action block and STOP. You will receive the result in a <tool_result> block, then you may continue or call another tool.',
     '',
-    'Action format:',
-    '<action name="tool_name">',
-    '<param_name>value</param_name>',
-    '</action>',
+    'Action format (bash heredoc style):',
+    '@@<tool_name>',
+    'param_name: single-line-value',
+    'param_name <<MARKER',
+    'multi-line value',
+    'goes here',
+    'MARKER',
+    '@@end',
     '',
     'Rules:',
-    '- One action per response, on its own line.',
+    '- Action lines (@@<tool_name>, key: value, MARKER, @@end) MUST each be on their own line.',
+    '- Inside a heredoc body, write content exactly as-is — no escaping needed. Any character is fine, including <, >, {, }, ", \\.',
+    '- The MARKER is any identifier you choose (e.g. EOF, FILE, CMD). The same MARKER must appear alone on its own line to close the heredoc.',
     '- Never wrap actions in markdown code fences.',
-    '- After writing </action>, STOP. Wait for the result before continuing.',
+    '- After writing @@end, STOP. Wait for the result before continuing.',
     '- When finished, write a short plain-text answer and emit no more actions.',
     '',
     'Tools:',
@@ -495,26 +500,29 @@ export function codeSystemPrompt(workspacePath: string, previewHref: string): st
     '',
     'CRITICAL FOR BUILD REQUESTS: You MUST emit a write_file action in your VERY FIRST response. Never respond with only a plan or description. Always start coding immediately.',
     '',
-    'ACTION FORMAT — EXACT',
-    '<action name="tool_name">',
-    '<param_name>value</param_name>',
-    '</action>',
+    'ACTION FORMAT — bash heredoc style',
+    '@@<tool_name>',
+    'key: single-line-value',
+    'key <<MARKER',
+    'multi-line value',
+    'MARKER',
+    '@@end',
     '',
-    '<content> RULES — READ TWICE',
-    'The string between <content> and </content> is WRITTEN TO DISK LITERALLY. Everything is saved.',
-    '- NEVER put ``` fences at the start or end of <content>. Not ``` alone, not ```html, not ```js. None.',
-    '- NEVER put explanatory text, "Key Features", "Instructions to Use", or any commentary INSIDE <content>. Only the file contents.',
-    '- Close <content> with </content> on its own line, immediately after the last line of the file.',
-    '- Then close the action with </action> on its own line.',
-    '- CRITICAL: Inside <content>, write source code exactly as-is. NEVER omit the < or > characters. In code, < is a comparison operator (e.g., i < n, y < arr.length, a < b) — it is NOT an XML tag. Write < verbatim. Do NOT write &lt; instead.',
+    'HEREDOC RULES — READ TWICE',
+    'Inside a heredoc body (between `key <<MARKER` and the closing `MARKER` line), text is WRITTEN TO DISK LITERALLY. No escaping. Any character is allowed: <, >, {, }, ", \\, /, anything.',
+    '- NEVER put ``` fences at the start or end of a file content heredoc. Not ``` alone, not ```html, not ```js. None.',
+    '- NEVER put explanatory text, "Key Features", "Instructions to Use", or any commentary inside a file content heredoc. Only the actual file contents.',
+    '- The closing MARKER must be on its own line, exactly matching the opening MARKER. No leading/trailing chars on that line.',
+    '- After the closing MARKER, close the action with `@@end` on its own line.',
+    '- The < character in code (e.g. `i < n`, `y < arr.length`, `a < b`) is a comparison operator — write it verbatim. The heredoc body is plain text, NOT XML.',
     '',
     'EXAMPLE — multi-file build (FIRST response)',
     '',
     "I'll split this into three files: index.html for structure, style.css for the design, and app.js for the countdown behavior. Starting with the HTML shell.",
     '',
-    '<action name="write_file">',
-    '<path>index.html</path>',
-    '<content>',
+    '@@write_file',
+    'path: index.html',
+    'content <<EOF',
     '<!doctype html>',
     '<html lang="en">',
     '<head>',
@@ -525,14 +533,14 @@ export function codeSystemPrompt(workspacePath: string, previewHref: string): st
     '</head>',
     '<body><main><h1>Coming soon</h1></main></body>',
     '</html>',
-    '</content>',
-    '</action>',
+    'EOF',
+    '@@end',
     '',
     'HARD RULES',
     '- If and only if the user clearly wants something built, start coding in your first response. Never reply with only a plan for a build request.',
     '- For non-build requests, answer normally and do not call workspace tools.',
-    '- Never paste file contents in your chat reply — only inside <content>.',
-    '- Never wrap <action> tags in ``` code fences.',
+    '- Never paste file contents in your chat reply — only inside a heredoc body.',
+    '- Never wrap action blocks in ``` code fences.',
     '- Paths are relative to the workspace (no leading slashes).',
     '- One action per response, then STOP and wait.',
     '',
@@ -551,7 +559,144 @@ export interface ParsedAction {
 }
 
 export function findNextAction(text: string, from = 0): ParsedAction | 'incomplete' | null {
-  // Accept variations: <action name="x">, name='x', name=x, case-insensitive
+  // Try heredoc format first (new primary format).
+  const here = findNextHeredocAction(text, from)
+  if (here !== null) return here
+  // Fall back to legacy XML format for old conversations.
+  return findNextXmlAction(text, from)
+}
+
+// New primary format: bash-style heredoc.
+//
+//   @@<tool_name>
+//   key: value           (single-line param)
+//   key <<MARKER         (heredoc multi-line param)
+//   ...content...
+//   MARKER
+//   @@end
+//
+// Inside a heredoc body, anything goes — no escaping. The marker must appear
+// alone on its own line to close the body.
+function findNextHeredocAction(text: string, from: number): ParsedAction | 'incomplete' | null {
+  let scanFrom = from
+  while (scanFrom <= text.length) {
+    const atIdx = text.indexOf('@@', scanFrom)
+    if (atIdx < 0) return null
+    // Must be at start of line (or start of text)
+    if (atIdx > 0 && text[atIdx - 1] !== '\n') {
+      scanFrom = atIdx + 2
+      continue
+    }
+    const nlIdx = text.indexOf('\n', atIdx)
+    if (nlIdx < 0) {
+      // Possibly still streaming the opening line — defer.
+      return 'incomplete'
+    }
+    const firstLine = text.slice(atIdx + 2, nlIdx).trim()
+    // Skip orphan @@end markers
+    if (firstLine === 'end' || firstLine === '') {
+      scanFrom = nlIdx + 1
+      continue
+    }
+    const nameMatch = firstLine.match(/^([a-zA-Z_][\w]*)$/)
+    if (!nameMatch) {
+      scanFrom = atIdx + 2
+      continue
+    }
+    const name = nameMatch[1]
+    const result = parseHeredocBody(text, nlIdx + 1, atIdx, name)
+    return result
+  }
+  return null
+}
+
+function parseHeredocBody(
+  text: string,
+  bodyStart: number,
+  actionStart: number,
+  name: string
+): ParsedAction | 'incomplete' {
+  const args: Record<string, unknown> = {}
+  let lineStart = bodyStart
+  while (lineStart <= text.length) {
+    const nlIdx = text.indexOf('\n', lineStart)
+    const lineEnd = nlIdx < 0 ? text.length : nlIdx
+    const line = text.slice(lineStart, lineEnd)
+    const trimmed = line.trimEnd()
+
+    // Action terminator
+    if (trimmed === '@@end') {
+      const actionEnd = nlIdx < 0 ? text.length : nlIdx + 1
+      return {
+        name,
+        args,
+        raw: text.slice(actionStart, actionEnd),
+        start: actionStart,
+        end: actionEnd
+      }
+    }
+
+    // Heredoc declaration: `key <<MARKER`
+    const heredocMatch = trimmed.match(/^([a-zA-Z_][\w]*)[ \t]+<<([a-zA-Z_][\w]*)$/)
+    if (heredocMatch) {
+      const [, key, marker] = heredocMatch
+      if (nlIdx < 0) return 'incomplete'
+      const hbStart = nlIdx + 1
+      // Scan forward for marker line
+      let scan = hbStart
+      let foundMarkerStart = -1
+      while (scan <= text.length) {
+        const nl = text.indexOf('\n', scan)
+        const candEnd = nl < 0 ? text.length : nl
+        const candLine = text.slice(scan, candEnd)
+        if (candLine.trimEnd() === marker) {
+          foundMarkerStart = scan
+          if (nl < 0) {
+            // Marker line found but no trailing newline — treat as last line
+            lineStart = text.length + 1
+          } else {
+            lineStart = nl + 1
+          }
+          break
+        }
+        if (nl < 0) return 'incomplete'
+        scan = nl + 1
+      }
+      if (foundMarkerStart < 0) return 'incomplete'
+      // Body is up to (but not including) the newline before the marker line.
+      let bodyEnd = foundMarkerStart
+      if (bodyEnd > hbStart && text[bodyEnd - 1] === '\n') bodyEnd -= 1
+      let content = text.slice(hbStart, bodyEnd)
+      // Defensive: if the model still HTML-escaped chars, decode them.
+      content = content.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+      args[key] = content
+      continue
+    }
+
+    // `key: value`
+    const kvMatch = trimmed.match(/^([a-zA-Z_][\w]*)[ \t]*:[ \t]*(.*)$/)
+    if (kvMatch) {
+      const [, key, rawVal] = kvMatch
+      const v = rawVal.trim()
+      if (v === 'true') args[key] = true
+      else if (v === 'false') args[key] = false
+      else if (/^-?\d+$/.test(v)) args[key] = Number(v)
+      else args[key] = v
+      if (nlIdx < 0) return 'incomplete'
+      lineStart = nlIdx + 1
+      continue
+    }
+
+    // Unknown / blank line — skip
+    if (nlIdx < 0) return 'incomplete'
+    lineStart = nlIdx + 1
+  }
+  return 'incomplete'
+}
+
+// Legacy XML parser kept as fallback for conversations whose history contains
+// the old `<action>...</action>` format.
+function findNextXmlAction(text: string, from: number): ParsedAction | 'incomplete' | null {
   const openRe = /<action\s+name\s*=\s*["']?([a-zA-Z_][\w]*)["']?\s*>/gi
   openRe.lastIndex = from
   const open = openRe.exec(text)
@@ -562,7 +707,7 @@ export function findNextAction(text: string, from = 0): ParsedAction | 'incomple
   if (!closeMatch || closeMatch.index === undefined) return 'incomplete'
   const closeIdx = bodyStart + closeMatch.index
   const body = text.slice(bodyStart, closeIdx)
-  const args = parseActionBody(body)
+  const args = parseXmlActionBody(body)
   return {
     name,
     args,
@@ -572,10 +717,8 @@ export function findNextAction(text: string, from = 0): ParsedAction | 'incomple
   }
 }
 
-function parseActionBody(body: string): Record<string, unknown> {
+function parseXmlActionBody(body: string): Record<string, unknown> {
   const args: Record<string, unknown> = {}
-
-  // Special-case <content>…</content> — use the LAST </content> to survive nested close-tags
   const contentOpen = body.indexOf('<content>')
   let outside = body
   if (contentOpen >= 0) {
@@ -584,13 +727,11 @@ function parseActionBody(body: string): Record<string, unknown> {
       let content = body.slice(contentOpen + '<content>'.length, contentCloseRel)
       content = content.replace(/^\n/, '')
       content = content.replace(/\n[ \t]*$/, '')
-      // Defensive decode: if the model HTML-escaped < > & instead of writing them verbatim
       content = content.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
       args.content = content
       outside = body.slice(0, contentOpen) + body.slice(contentCloseRel + '</content>'.length)
     }
   }
-
   const tagRe = /<([a-zA-Z_][\w-]*)>([\s\S]*?)<\/\1>/g
   let m: RegExpExecArray | null
   while ((m = tagRe.exec(outside)) !== null) {
@@ -607,20 +748,29 @@ function parseActionBody(body: string): Record<string, unknown> {
 }
 
 export function emitSafeBoundary(buffer: string, from: number): number {
-  // Return the largest index ≤ buffer.length such that the slice [from, idx)
-  // cannot be the start of a forming <action ...> tag.
-  // Scan backwards from the end for a '<' that could start "<action".
+  // Hold back any tail that could be the start of a forming action opener
+  // (either heredoc `@@<name>` at start of line, or legacy `<action ...>`).
   for (let i = buffer.length - 1; i >= from; i--) {
-    if (buffer[i] !== '<') continue
-    const tail = buffer.slice(i).toLowerCase()
-    // Could this be the start of "<action"? If tail is shorter than "<action"
-    // we can't be sure yet — hold back.
-    if (tail.length < 8) {
-      if ('<action'.startsWith(tail)) return i
+    const ch = buffer[i]
+    if (ch === '@') {
+      // Heredoc opener must be at start of line.
+      if (i > 0 && buffer[i - 1] !== '\n') continue
+      const tail = buffer.slice(i)
+      // `@@<name>\n` is the open form. If we haven't seen the closing newline
+      // yet, the action header is still forming — hold back.
+      if (!tail.includes('\n')) return i
+      // Has a newline → first line is complete; if it matches @@<name> it will
+      // be picked up by findNextAction in a later pass.
       continue
     }
-    if (tail.startsWith('<action') && /\s/.test(tail[7])) return i
-    // Otherwise this '<' is some other tag — safe.
+    if (ch === '<') {
+      const tail = buffer.slice(i).toLowerCase()
+      if (tail.length < 8) {
+        if ('<action'.startsWith(tail)) return i
+        continue
+      }
+      if (tail.startsWith('<action') && /\s/.test(tail[7])) return i
+    }
   }
   return buffer.length
 }
