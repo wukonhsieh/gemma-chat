@@ -16,6 +16,7 @@ interface Props {
   onRegenerate?: () => void
   searchQuery?: string
   matchOffset?: number
+  activeMatchIndex?: number
 }
 
 interface Parsed {
@@ -40,22 +41,36 @@ export function parseThinking(content: string): Parsed {
   return { thinking, thinkingInProgress: false, visible: (before + rest).trim() }
 }
 
-function highlightText(text: string, query: string): React.ReactNode {
+function highlightText(
+  text: string,
+  query: string,
+  matchOffset: number,
+  activeMatchIndex?: number
+): React.ReactNode {
   if (!query) return text
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
-  return parts.map((part, i) =>
-    i % 2 === 1 ? (
-      <span key={i} className="rounded-[2px] bg-yellow-400/30">
-        {part}
-      </span>
-    ) : (
-      part
-    )
-  )
+  let localIdx = 0
+  return parts.map((part, i) => {
+    if (i % 2 === 1) {
+      const globalIdx = matchOffset + localIdx
+      localIdx++
+      const isActive = activeMatchIndex !== undefined && globalIdx === activeMatchIndex
+      return (
+        <span
+          key={i}
+          data-match-idx={globalIdx}
+          className={isActive ? 'rounded-[2px] bg-yellow-400/80' : 'rounded-[2px] bg-yellow-400/30'}
+        >
+          {part}
+        </span>
+      )
+    }
+    return part
+  })
 }
 
-export default function Message({ message, streaming, onRegenerate, searchQuery, matchOffset }: Props) {
+export default function Message({ message, streaming, onRegenerate, searchQuery, matchOffset, activeMatchIndex }: Props) {
   const isUser = message.role === 'user'
   const parsed = useMemo(() => parseThinking(message.content), [message.content])
   const html = useMemo(() => {
@@ -72,7 +87,9 @@ export default function Message({ message, streaming, onRegenerate, searchQuery,
       <div className="flex justify-end">
         <div className="selectable max-w-[78%] rounded-2xl rounded-br-md bg-white/[0.08] px-4 py-2.5 text-[14.5px] leading-relaxed text-white">
           <div className="whitespace-pre-wrap">
-            {searchQuery ? highlightText(message.content, searchQuery) : message.content}
+            {searchQuery
+              ? highlightText(message.content, searchQuery, matchOffset ?? 0, activeMatchIndex)
+              : message.content}
           </div>
         </div>
       </div>
@@ -101,7 +118,9 @@ export default function Message({ message, streaming, onRegenerate, searchQuery,
             className="markdown-body text-[14.5px] text-ink-100"
             dangerouslySetInnerHTML={{
               __html:
-                (searchQuery ? highlightHtml(html, searchQuery, matchOffset ?? 0) : html) +
+                (searchQuery
+                  ? highlightHtml(html, searchQuery, matchOffset ?? 0, activeMatchIndex)
+                  : html) +
                 (showCursor && parsed.visible ? '<span class="anim-caret">▍</span>' : '')
             }}
           />

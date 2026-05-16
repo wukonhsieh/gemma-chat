@@ -2,7 +2,7 @@
 
 - [x] Task 1 - Search state + Ctrl+F 快捷鍵 + Search bar UI
 - [x] Task 2 - Match 計算 + 全訊息 passive 高亮
-- [ ] Task 3 - Active match 追蹤 + prev/next 導航 + scrollIntoView
+- [x] Task 3 - Active match 追蹤 + prev/next 導航 + scrollIntoView
 
 # Change Logs
 
@@ -32,3 +32,17 @@
 ### Notes
 - `highlightText` 因回傳 JSX 無法放進 `.ts` 模組，保留在 `Message.tsx` inline
 - `data-match-idx` 屬性與 `activeMatchIndex` state 延至 Task 3
+
+## Task 3 - Active match 追蹤 + prev/next 導航 + scrollIntoView
+
+### Summary
+`highlightHtml` 升級為使用實際 `matchOffset` 並接受 `activeMatchIndex`，每個 `<mark>` 加上 `data-match-idx` 與 active/passive 內聯樣式（`rgba(250,204,21,0.8)` vs `0.3`）。`highlightText` 同理：每個 match span 加 `data-match-idx` 屬性與 active class（`bg-yellow-400/80` vs `/30`）。`Message.tsx` 新增 `activeMatchIndex` prop 並傳入兩個 highlight 函式。`Chat.tsx` 新增 `activeMatchIndex` state、`goNext`/`goPrev` useCallback（wrapping modulo）、reset effect（searchQuery 改變時歸零）、scrollIntoView effect（`[data-match-idx="${activeMatchIndex}"]`）。`SearchBar` 獲得 `activeMatchIndex`/`onNext`/`onPrev` props：計數器改為 `"X / N"` 格式，prev/next 按鈕在有匹配時啟用，input `onKeyDown` 支援 `Enter`（goNext）/ `Shift+Enter`（goPrev）。typecheck + build + 7 unit tests 全 pass。
+
+### Changed Files
+- src/renderer/src/lib/highlight.ts
+- src/renderer/src/components/Message.tsx
+- src/renderer/src/components/Chat.tsx
+
+### Notes
+- `scrollIntoView({ block: 'nearest', behavior: 'smooth' })` 避免過度捲動
+- `activeMatchIndex` reset 透過 `useEffect([searchQuery])` 觸發，確保新搜尋從第 0 個 match 開始
