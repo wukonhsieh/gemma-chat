@@ -175,3 +175,18 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
 ]
 
 export const DEFAULT_MODEL = 'unsloth/gemma-4-31b-it-UD-MLX-4bit'
+
+// Settings types
+export interface ToolInfo {
+  name: string
+  description: string
+}
+
+export type ToolPermissionValue = ToolPermissionMode
+
+export const SETTINGS_CHANNELS = {
+  GET_TOOL_LIST: 'settings:get-tool-list',
+  GET_WORKSPACE_ROOT: 'settings:get-workspace-root',
+  GET_PERMISSIONS: 'settings:get-permissions',
+  SET_PERMISSION: 'settings:set-permission',
+} as const

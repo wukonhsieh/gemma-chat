@@ -8,6 +8,7 @@ type AppState =
   | { phase: 'setup'; status: SetupStatus; model: string }
   | { phase: 'ready'; model: string }
   | { phase: 'switching'; model: string; toModel: string; status: SetupStatus }
+  | { phase: 'settings'; model: string }
 
 export default function App() {
   const [state, setState] = useState<AppState>({ phase: 'boot' })
