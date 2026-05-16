@@ -4,6 +4,7 @@ import { createReadStream } from 'fs'
 import { mkdir, readFile, writeFile, readdir, stat, access, rm, rename } from 'fs/promises'
 import { join, resolve, dirname, extname, relative, sep, isAbsolute } from 'path'
 import { spawn } from 'child_process'
+import { randomUUID } from 'crypto'
 
 let server: Server | null = null
 let serverPort = 0
@@ -344,9 +345,14 @@ export async function wsWriteFile(
   const base = await ensureWorkspace(conversationId)
   const target = resolveWorkspaceAccessPath(base, path, options)
   await mkdir(dirname(target), { recursive: true })
-  const tmp = target + '.tmp-' + Date.now()
-  await writeFile(tmp, content, 'utf-8')
-  await rename(tmp, target)
+  const tmp = `${target}.tmp-${process.pid}-${randomUUID()}`
+  try {
+    await writeFile(tmp, content, 'utf-8')
+    await rename(tmp, target)
+  } catch (err) {
+    await rm(tmp, { force: true }).catch(() => {})
+    throw new Error(`write_file failed for ${path}: ${(err as Error).message}`)
+  }
   return target
 }
 
