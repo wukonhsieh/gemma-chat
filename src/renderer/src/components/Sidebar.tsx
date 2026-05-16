@@ -17,6 +17,7 @@ interface Props {
   onAddProject: () => void
   onSelectProject: (id: string | null) => void
   onDeleteProject: (id: string) => void
+  onOpenSettings?: () => void
 }
 
 export default function Sidebar({
@@ -29,7 +30,8 @@ export default function Sidebar({
   onDelete,
   onAddProject,
   onSelectProject,
-  onDeleteProject
+  onDeleteProject,
+  onOpenSettings
 }: Props) {
   return (
     <div className="drag flex h-full w-60 shrink-0 flex-col border-r border-white/[0.06] bg-black/20">
@@ -144,6 +146,18 @@ export default function Sidebar({
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
             Running locally
           </div>
+          {onOpenSettings && (
+            <button
+              title="Settings"
+              onClick={onOpenSettings}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-ink-400 transition hover:bg-white/10 hover:text-white"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.4">
+                <circle cx="8" cy="8" r="2.5" />
+                <path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.4 3.4l.7.7M11.9 11.9l.7.7M3.4 12.6l.7-.7M11.9 4.1l.7-.7" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </div>

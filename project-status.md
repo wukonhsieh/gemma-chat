@@ -2,11 +2,25 @@
 
 - [x] Task 1 - 擴充 shared types 與 IPC channel 合約
 - [x] Task 2 - Main process IPC handlers + Preload bridge 擴充
-- [ ] Task 3 - App-level navigation：settings phase + gear icon
+- [x] Task 3 - App-level navigation：settings phase + gear icon
 - [ ] Task 4 - Settings 頁面：Sidebar layout + General 分頁
 - [ ] Task 5 - Settings 頁面：Permissions 分頁（Tool 清單 + 即時寫入）
 
 # Change Logs
+
+## Task 3 - App-level navigation：settings phase + gear icon
+
+### Summary
+`App.tsx` 新增 `handleOpenSettings()`（ready → settings）、`handleCloseSettings()`（settings → ready）、`settings` phase render 分支（`SettingsPlaceholder`）。`Chat.tsx` 新增 `onOpenSettings` optional prop 並傳入 `Sidebar`。`Sidebar.tsx` 新增 `onOpenSettings` prop 及 gear icon button 於底部「Running locally」區塊右側。`npm run typecheck && npm run build` 全通過。
+
+### Changed Files
+- src/renderer/src/App.tsx
+- src/renderer/src/components/Chat.tsx
+- src/renderer/src/components/Sidebar.tsx
+
+### Notes
+- `SettingsPlaceholder` 為暫時佔位符，Task 4 直接替換成正式 Settings component，App.tsx 不需再動
+- `switching` phase 的 `<Chat>` render 不傳 `onOpenSettings`，符合 spec non-goal（切換期間不觸發 settings）
 
 ## Task 2 - Main process IPC handlers + Preload bridge 擴充
 

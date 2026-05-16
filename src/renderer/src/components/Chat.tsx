@@ -17,6 +17,7 @@ import Canvas from './Canvas'
 interface Props {
   model: string
   onSwitchModel: (model: string) => void
+  onOpenSettings?: () => void
 }
 
 interface Conversation {
@@ -160,7 +161,7 @@ function touchProject(
   )
 }
 
-export default function Chat({ model, onSwitchModel }: Props) {
+export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
   let initialActiveId = ''
   const [chatState, setChatState] = useState<ChatState>(() => {
     const loaded = loadChatState()
@@ -513,6 +514,7 @@ export default function Chat({ model, onSwitchModel }: Props) {
         onAddProject={addProject}
         onSelectProject={selectProject}
         onDeleteProject={deleteProject}
+        onOpenSettings={onOpenSettings}
       />
       <div className="flex min-w-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">

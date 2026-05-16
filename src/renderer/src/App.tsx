@@ -87,6 +87,20 @@ export default function App() {
     window.api.switchModel(newModel)
   }
 
+  function handleOpenSettings(): void {
+    setState((prev) => {
+      if (prev.phase !== 'ready') return prev
+      return { phase: 'settings', model: prev.model }
+    })
+  }
+
+  function handleCloseSettings(): void {
+    setState((prev) => {
+      if (prev.phase !== 'settings') return prev
+      return { phase: 'ready', model: prev.model }
+    })
+  }
+
   if (state.phase === 'boot') {
     return <BootSplash />
   }
@@ -122,9 +136,31 @@ export default function App() {
     )
   }
 
+  if (state.phase === 'settings') {
+    return (
+      <div key="settings" className="anim-fade-in h-full w-full">
+        <SettingsPlaceholder onBack={handleCloseSettings} />
+      </div>
+    )
+  }
+
   return (
     <div key="chat" className="anim-fade-scale h-full w-full">
-      <Chat model={state.model} onSwitchModel={handleSwitchModel} />
+      <Chat model={state.model} onSwitchModel={handleSwitchModel} onOpenSettings={handleOpenSettings} />
+    </div>
+  )
+}
+
+function SettingsPlaceholder({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-black/80 text-white">
+      <p className="text-sm text-white/60">Settings — coming in Task 4</p>
+      <button
+        onClick={onBack}
+        className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/70 hover:bg-white/10"
+      >
+        ← Back
+      </button>
     </div>
   )
 }
