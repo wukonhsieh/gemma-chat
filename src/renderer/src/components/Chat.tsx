@@ -238,6 +238,10 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
   }, [chatState])
 
   useEffect(() => {
+    localStorage.setItem('gabie:active-id', activeId)
+  }, [activeId])
+
+  useEffect(() => {
     const project = activeProject
     const matching = conversations.filter((c) =>
       activeProjectId ? c.projectId === activeProjectId : !c.projectId

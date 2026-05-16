@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { ToolInfo, ToolPermissionValue } from '@shared/types'
+import { useEffect, useMemo, useState } from 'react'
+import type { AgentMode, ToolCall, ToolInfo, ToolPermissionValue } from '@shared/types'
 
 type SettingsTab = 'general' | 'permissions'
 
@@ -152,9 +152,72 @@ function PermissionsTab() {
   )
 }
 
+const STATE_KEY = 'gabie:state:v3'
+const ACTIVE_ID_KEY = 'gabie:active-id'
+
+interface StoredMessage {
+  id: string
+  role: string
+  content: string
+  toolCalls?: ToolCall[]
+}
+
+interface StoredConversation {
+  id: string
+  mode: AgentMode
+  projectPath?: string
+  messages: StoredMessage[]
+}
+
+interface StoredChatState {
+  conversations: StoredConversation[]
+  activeProjectId: string | null
+}
+
+function loadActiveConversation(): StoredConversation | null {
+  try {
+    const raw = localStorage.getItem(STATE_KEY)
+    if (!raw) return null
+    const state = JSON.parse(raw) as StoredChatState
+    const activeId = localStorage.getItem(ACTIVE_ID_KEY)
+    const conv = activeId
+      ? (state.conversations.find((c) => c.id === activeId) ?? state.conversations[0])
+      : state.conversations[0]
+    return conv ?? null
+  } catch {
+    return null
+  }
+}
+
+function formatContext(systemPrompt: string, messages: StoredMessage[]): string {
+  const parts: string[] = []
+  parts.push('[system]:')
+  parts.push(systemPrompt)
+  for (const m of messages) {
+    parts.push('')
+    parts.push(`[${m.role}]:`)
+    parts.push(m.content)
+    if (m.toolCalls) {
+      for (const tc of m.toolCalls) {
+        const result = (tc as ToolCall & { result?: string }).result
+        if (result != null) {
+          parts.push('')
+          parts.push(`[tool_result: ${tc.name}]:`)
+          parts.push(result)
+        }
+      }
+    }
+  }
+  return parts.join('\n')
+}
+
 function GeneralTab() {
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
   const [error, setError] = useState(false)
+  const [contextText, setContextText] = useState<string | null>(null)
+  const [contextError, setContextError] = useState(false)
+
+  const conversation = useMemo(() => loadActiveConversation(), [])
 
   useEffect(() => {
     window.api.settingsGetWorkspaceRoot()
@@ -162,9 +225,24 @@ function GeneralTab() {
       .catch(() => setError(true))
   }, [])
 
+  useEffect(() => {
+    if (!conversation) {
+      setContextText('')
+      return
+    }
+    window.api.settingsGetSystemPrompt(conversation.mode, conversation.projectPath)
+      .then((sysPrompt) => {
+        setContextText(formatContext(sysPrompt, conversation.messages))
+      })
+      .catch(() => setContextError(true))
+  }, [conversation])
+
+  const msgCount = conversation?.messages.length ?? 0
+
   return (
-    <div className="max-w-lg space-y-6">
+    <div className="max-w-2xl space-y-8">
       <h2 className="text-[15px] font-semibold text-white">General</h2>
+
       <div className="space-y-1.5">
         <label className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
           Workspace Root Folder
@@ -180,6 +258,35 @@ function GeneralTab() {
         </div>
         <p className="text-[11px] text-ink-400">
           Read-only. Generated projects are stored here.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-baseline gap-2">
+          <label className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
+            Context
+          </label>
+          {msgCount > 0 && (
+            <span className="text-[10px] text-ink-500">{msgCount} messages</span>
+          )}
+        </div>
+        <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.03]">
+          {contextError ? (
+            <p className="px-3 py-2.5 text-[12.5px] text-red-400/80">Unable to load context</p>
+          ) : contextText === null ? (
+            <p className="px-3 py-2.5 text-[12.5px] text-ink-400">…</p>
+          ) : contextText === '' ? (
+            <p className="px-3 py-2.5 text-[12.5px] text-ink-400">No active conversation</p>
+          ) : (
+            <textarea
+              readOnly
+              value={contextText}
+              className="h-80 w-full resize-none bg-transparent px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-ink-200 outline-none"
+            />
+          )}
+        </div>
+        <p className="text-[11px] text-ink-400">
+          Full content sent to the LLM on each turn — system prompt + conversation history.
         </p>
       </div>
     </div>

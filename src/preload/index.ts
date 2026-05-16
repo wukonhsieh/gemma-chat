@@ -105,7 +105,10 @@ const api = {
     ipcRenderer.invoke(SETTINGS_CHANNELS.GET_PERMISSIONS),
 
   settingsSetPermission: (tool: string, value: ToolPermissionValue): Promise<void> =>
-    ipcRenderer.invoke(SETTINGS_CHANNELS.SET_PERMISSION, { tool, value })
+    ipcRenderer.invoke(SETTINGS_CHANNELS.SET_PERMISSION, { tool, value }),
+
+  settingsGetSystemPrompt: (mode: string, projectPath?: string): Promise<string> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.GET_SYSTEM_PROMPT, { mode, projectPath })
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -189,4 +189,5 @@ export const SETTINGS_CHANNELS = {
   GET_WORKSPACE_ROOT: 'settings:get-workspace-root',
   GET_PERMISSIONS: 'settings:get-permissions',
   SET_PERMISSION: 'settings:set-permission',
+  GET_SYSTEM_PROMPT: 'settings:get-system-prompt',
 } as const

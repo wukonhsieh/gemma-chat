@@ -871,6 +871,17 @@ app.whenReady().then(async () => {
     }
   )
 
+  ipcMain.handle(
+    SETTINGS_CHANNELS.GET_SYSTEM_PROMPT,
+    async (_e, { mode, projectPath }: { mode: string; projectPath?: string }): Promise<string> => {
+      if (mode === 'code') {
+        const wsPath = projectPath ?? workspacesRoot()
+        return codeSystemPrompt(wsPath, '')
+      }
+      return chatSystemPrompt(true)
+    }
+  )
+
   ipcMain.handle('tool-permission:respond', async (_e, response: ToolPermissionResponse) => {
     return { ok: resolveToolPermission(response) }
   })
