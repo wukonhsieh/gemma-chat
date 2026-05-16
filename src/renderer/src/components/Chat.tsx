@@ -10,7 +10,8 @@ import {
 } from '@shared/types'
 import gemmaLogoUrl from '../assets/gabie-smile.png'
 import Composer from './Composer'
-import Message, { PermissionBanner } from './Message'
+import Message, { PermissionBanner, parseThinking } from './Message'
+import { countMatches } from '../lib/highlight'
 import Sidebar from './Sidebar'
 import Canvas from './Canvas'
 
@@ -522,6 +523,19 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
     (activeConversation.mode === 'code' || activeConversation.canvasOpen === true) &&
     activeConversation.canvasOpen !== false
 
+  const { matchOffsets, totalMatches } = useMemo(() => {
+    if (!searchQuery) {
+      return { matchOffsets: activeConversation.messages.map(() => 0), totalMatches: 0 }
+    }
+    const offsets: number[] = []
+    let sum = 0
+    for (const m of activeConversation.messages) {
+      offsets.push(sum)
+      sum += countMatches(parseThinking(m.content).visible, searchQuery)
+    }
+    return { matchOffsets: offsets, totalMatches: sum }
+  }, [activeConversation.messages, searchQuery])
+
   const pendingPermissionCall = useMemo(() => {
     for (const m of activeConversation.messages) {
       for (const tc of m.toolCalls ?? []) {
@@ -561,6 +575,7 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
               query={searchQuery}
               onChange={setSearchQuery}
               onClose={closeSearch}
+              totalMatches={totalMatches}
             />
           )}
           <MessageList
@@ -568,6 +583,8 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
             streaming={streaming}
             mode={activeConversation.mode}
             onRegenerate={handleRegenerate}
+            searchQuery={searchQuery}
+            matchOffsets={matchOffsets}
           />
           {pendingPermissionCall && (
             <PermissionBanner call={pendingPermissionCall} onPermission={handleToolPermission} />
@@ -794,12 +811,16 @@ function MessageList({
   messages,
   streaming,
   mode,
-  onRegenerate
+  onRegenerate,
+  searchQuery,
+  matchOffsets
 }: {
   messages: ChatMessage[]
   streaming: boolean
   mode: AgentMode
   onRegenerate: () => void
+  searchQuery?: string
+  matchOffsets?: number[]
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
@@ -834,6 +855,8 @@ function MessageList({
                 message={m}
                 isLast={i === messages.length - 1}
                 streaming={streaming && i === messages.length - 1}
+                searchQuery={searchQuery}
+                matchOffset={matchOffsets?.[i]}
                 onRegenerate={
                   !streaming && m.role === 'assistant' && i === messages.length - 1
                     ? onRegenerate
@@ -917,12 +940,20 @@ function EmptyState({ mode }: { mode: AgentMode }) {
 function SearchBar({
   query,
   onChange,
-  onClose
+  onClose,
+  totalMatches
 }: {
   query: string
   onChange: (q: string) => void
   onClose: () => void
+  totalMatches: number
 }) {
+  const counter = !query ? '—' : String(totalMatches)
+  const counterClass = !query
+    ? 'min-w-[2rem] text-center text-[11px] text-ink-400'
+    : totalMatches === 0
+      ? 'min-w-[2rem] text-center text-[11px] text-red-400/70'
+      : 'min-w-[2rem] text-center text-[11px] text-ink-300'
   return (
     <div className="absolute right-4 top-11 z-50 flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-ink-950/95 px-3 py-2 shadow-2xl backdrop-blur-sm">
       <input
@@ -933,7 +964,7 @@ function SearchBar({
         placeholder="Search…"
         className="w-44 bg-transparent text-[13px] text-white placeholder-ink-400 outline-none"
       />
-      <span className="min-w-[2rem] text-center text-[11px] text-ink-400">—</span>
+      <span className={counterClass}>{counter}</span>
       <button
         disabled
         className="flex h-6 w-6 items-center justify-center rounded-md text-ink-400 opacity-30"

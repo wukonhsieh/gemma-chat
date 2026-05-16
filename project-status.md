@@ -1,7 +1,7 @@
 # Todo List
 
 - [x] Task 1 - Search state + Ctrl+F 快捷鍵 + Search bar UI
-- [ ] Task 2 - Match 計算 + 全訊息 passive 高亮
+- [x] Task 2 - Match 計算 + 全訊息 passive 高亮
 - [ ] Task 3 - Active match 追蹤 + prev/next 導航 + scrollIntoView
 
 # Change Logs
@@ -17,3 +17,18 @@
 ### Notes
 - `activeMatchIndex` 延至 Task 3 才宣告（Task 1 / Task 2 尚未使用，宣告會觸發 TS `declared but never read` 錯誤）
 - Task 2 在實作計數顯示時以 hardcoded `0` 作為 active index 起點，Task 3 再替換為真實 state
+
+## Task 2 - Match 計算 + 全訊息 passive 高亮
+
+### Summary
+新增 `src/renderer/src/lib/highlight.ts`（純 TS，含 `escapeRegex`、`countMatches`、`highlightHtml`）。`Message.tsx` 加入 `searchQuery?` / `matchOffset?` props、export `parseThinking`、inline `highlightText` 函式；user messages 用 `highlightText` 包裝 span，assistant HTML 用 `highlightHtml` 注入 `<mark>` 標籤。`Chat.tsx` import `countMatches` + `parseThinking`，以 `useMemo` 計算 `matchOffsets[]` prefix sum 與 `totalMatches`，透過 `MessageList` 傳入每則 `<Message>`；`SearchBar` 加入 `totalMatches` prop，counter 依 query 空/有無匹配動態顯示。harness `test/search/highlight.test.ts` 7 tests 全 pass，typecheck + build 通過。
+
+### Changed Files
+- src/renderer/src/lib/highlight.ts（新增）
+- test/search/highlight.test.ts（新增）
+- src/renderer/src/components/Message.tsx
+- src/renderer/src/components/Chat.tsx
+
+### Notes
+- `highlightText` 因回傳 JSX 無法放進 `.ts` 模組，保留在 `Message.tsx` inline
+- `data-match-idx` 屬性與 `activeMatchIndex` state 延至 Task 3

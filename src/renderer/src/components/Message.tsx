@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
 import type {
   AgentActivity,
@@ -7,12 +7,15 @@ import type {
   ToolPermissionResponseDecision
 } from '@shared/types'
 import gemmaLogoUrl from '../assets/gabie-smile.png'
+import { highlightHtml } from '../lib/highlight'
 
 interface Props {
   message: ChatMessage
   isLast: boolean
   streaming: boolean
   onRegenerate?: () => void
+  searchQuery?: string
+  matchOffset?: number
 }
 
 interface Parsed {
@@ -21,7 +24,7 @@ interface Parsed {
   visible: string
 }
 
-function parseThinking(content: string): Parsed {
+export function parseThinking(content: string): Parsed {
   const openRe = /<think(?:ing)?>/
   const closeRe = /<\/think(?:ing)?>/
   const openMatch = content.match(openRe)
@@ -37,7 +40,22 @@ function parseThinking(content: string): Parsed {
   return { thinking, thinkingInProgress: false, visible: (before + rest).trim() }
 }
 
-export default function Message({ message, streaming, onRegenerate }: Props) {
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!query) return text
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="rounded-[2px] bg-yellow-400/30">
+        {part}
+      </span>
+    ) : (
+      part
+    )
+  )
+}
+
+export default function Message({ message, streaming, onRegenerate, searchQuery, matchOffset }: Props) {
   const isUser = message.role === 'user'
   const parsed = useMemo(() => parseThinking(message.content), [message.content])
   const html = useMemo(() => {
@@ -53,7 +71,9 @@ export default function Message({ message, streaming, onRegenerate }: Props) {
     return (
       <div className="flex justify-end">
         <div className="selectable max-w-[78%] rounded-2xl rounded-br-md bg-white/[0.08] px-4 py-2.5 text-[14.5px] leading-relaxed text-white">
-          <div className="whitespace-pre-wrap">{message.content}</div>
+          <div className="whitespace-pre-wrap">
+            {searchQuery ? highlightText(message.content, searchQuery) : message.content}
+          </div>
         </div>
       </div>
     )
@@ -80,7 +100,9 @@ export default function Message({ message, streaming, onRegenerate }: Props) {
           <div
             className="markdown-body text-[14.5px] text-ink-100"
             dangerouslySetInnerHTML={{
-              __html: html + (showCursor && parsed.visible ? '<span class="anim-caret">▍</span>' : '')
+              __html:
+                (searchQuery ? highlightHtml(html, searchQuery, matchOffset ?? 0) : html) +
+                (showCursor && parsed.visible ? '<span class="anim-caret">▍</span>' : '')
             }}
           />
         )}
