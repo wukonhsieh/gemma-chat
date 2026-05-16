@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { DEFAULT_MODEL, type SetupStatus } from '@shared/types'
 import Setup from './components/Setup'
 import Chat from './components/Chat'
+import Settings from './components/Settings'
 
 type AppState =
   | { phase: 'boot' }
@@ -139,7 +140,7 @@ export default function App() {
   if (state.phase === 'settings') {
     return (
       <div key="settings" className="anim-fade-in h-full w-full">
-        <SettingsPlaceholder onBack={handleCloseSettings} />
+        <Settings onBack={handleCloseSettings} />
       </div>
     )
   }
@@ -147,20 +148,6 @@ export default function App() {
   return (
     <div key="chat" className="anim-fade-scale h-full w-full">
       <Chat model={state.model} onSwitchModel={handleSwitchModel} onOpenSettings={handleOpenSettings} />
-    </div>
-  )
-}
-
-function SettingsPlaceholder({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-black/80 text-white">
-      <p className="text-sm text-white/60">Settings — coming in Task 4</p>
-      <button
-        onClick={onBack}
-        className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/70 hover:bg-white/10"
-      >
-        ← Back
-      </button>
     </div>
   )
 }
