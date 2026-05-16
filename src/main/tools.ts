@@ -506,6 +506,7 @@ export function codeSystemPrompt(workspacePath: string, previewHref: string): st
     '- NEVER put explanatory text, "Key Features", "Instructions to Use", or any commentary INSIDE <content>. Only the file contents.',
     '- Close <content> with </content> on its own line, immediately after the last line of the file.',
     '- Then close the action with </action> on its own line.',
+    '- CRITICAL: Inside <content>, write source code exactly as-is. NEVER omit the < or > characters. In code, < is a comparison operator (e.g., i < n, y < arr.length, a < b) — it is NOT an XML tag. Write < verbatim. Do NOT write &lt; instead.',
     '',
     'EXAMPLE — multi-file build (FIRST response)',
     '',
@@ -583,6 +584,8 @@ function parseActionBody(body: string): Record<string, unknown> {
       let content = body.slice(contentOpen + '<content>'.length, contentCloseRel)
       content = content.replace(/^\n/, '')
       content = content.replace(/\n[ \t]*$/, '')
+      // Defensive decode: if the model HTML-escaped < > & instead of writing them verbatim
+      content = content.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
       args.content = content
       outside = body.slice(0, contentOpen) + body.slice(contentCloseRel + '</content>'.length)
     }
