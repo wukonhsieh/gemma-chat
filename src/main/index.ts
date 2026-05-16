@@ -411,7 +411,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
           if (tc.result != null) {
             baseMessages.push({
               role: 'user',
-              content: `<tool_result name="${tc.name}" status="ok">\n${tc.result}\n</tool_result>`
+              content: `=== tool_result name=${tc.name} status=ok ===\n${tc.result}\n=== end ===`
             })
           }
         }
@@ -702,7 +702,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
             baseMessages.push({ role: 'assistant', content: buffer.slice(0, emittedIdx) })
             baseMessages.push({
               role: 'user',
-              content: `<tool_result name="${found.name}" status="${hadError ? 'error' : 'ok'}">\n${result}\n</tool_result>`
+              content: `=== tool_result name=${found.name} status=${hadError ? 'error' : 'ok'} ===\n${result}\n=== end ===`
             })
             executedAction = true
             if (livePath) {
