@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ToolInfo, ToolPermissionValue } from '@shared/types'
 
 type SettingsTab = 'general' | 'permissions'
 
@@ -47,9 +48,7 @@ export default function Settings({ onBack }: Props) {
         <div className="h-11 shrink-0" />
         <div className="px-8 py-4">
           {activeTab === 'general' && <GeneralTab />}
-          {activeTab === 'permissions' && (
-            <div className="text-sm text-ink-400">Permissions — coming in next step</div>
-          )}
+          {activeTab === 'permissions' && <PermissionsTab />}
         </div>
       </div>
     </div>
@@ -74,6 +73,82 @@ function SidebarItem({
     >
       {label}
     </button>
+  )
+}
+
+function PermissionsTab() {
+  const [tools, setTools] = useState<ToolInfo[]>([])
+  const [permissions, setPermissions] = useState<Record<string, ToolPermissionValue>>({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    Promise.all([window.api.settingsGetToolList(), window.api.settingsGetPermissions()])
+      .then(([toolList, perms]) => {
+        setTools(toolList)
+        setPermissions(perms)
+        setLoading(false)
+      })
+      .catch(() => {
+        setError(true)
+        setLoading(false)
+      })
+  }, [])
+
+  async function handleChange(tool: string, newValue: ToolPermissionValue) {
+    const prev = permissions[tool]
+    setPermissions((p) => ({ ...p, [tool]: newValue }))
+    try {
+      await window.api.settingsSetPermission(tool, newValue)
+    } catch {
+      setPermissions((p) => ({ ...p, [tool]: prev }))
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="max-w-lg space-y-6">
+        <h2 className="text-[15px] font-semibold text-white">Permissions</h2>
+        <div className="text-[12.5px] text-ink-400">…</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-lg space-y-6">
+        <h2 className="text-[15px] font-semibold text-white">Permissions</h2>
+        <div className="text-[12.5px] text-red-400/80">Unable to load permissions</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-lg space-y-6">
+      <h2 className="text-[15px] font-semibold text-white">Permissions</h2>
+      <div className="space-y-1">
+        {tools.map((tool) => (
+          <div
+            key={tool.name}
+            className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2.5"
+          >
+            <div className="min-w-0 flex-1 pr-4">
+              <div className="text-[13px] font-medium text-white">{tool.name}</div>
+              <div className="mt-0.5 text-[11px] text-ink-400">{tool.description}</div>
+            </div>
+            <select
+              value={permissions[tool.name] ?? 'ask'}
+              onChange={(e) => handleChange(tool.name, e.target.value as ToolPermissionValue)}
+              className="shrink-0 cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.06] px-2 py-1 text-[12px] text-ink-100 focus:outline-none focus:ring-1 focus:ring-white/20"
+            >
+              <option value="allow">Allow</option>
+              <option value="ask">Ask</option>
+              <option value="deny">Deny</option>
+            </select>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 

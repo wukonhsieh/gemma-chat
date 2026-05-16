@@ -3,10 +3,34 @@
 - [x] Task 1 - 擴充 shared types 與 IPC channel 合約
 - [x] Task 2 - Main process IPC handlers + Preload bridge 擴充
 - [x] Task 3 - App-level navigation：settings phase + gear icon
-- [ ] Task 4 - Settings 頁面：Sidebar layout + General 分頁
-- [ ] Task 5 - Settings 頁面：Permissions 分頁（Tool 清單 + 即時寫入）
+- [x] Task 4 - Settings 頁面：Sidebar layout + General 分頁
+- [x] Task 5 - Settings 頁面：Permissions 分頁（Tool 清單 + 即時寫入）
 
 # Change Logs
+
+## Task 5 - Settings 頁面：Permissions 分頁（Tool 清單 + 即時寫入）
+
+### Summary
+在 `Settings.tsx` 新增 `PermissionsTab` component。掛載時並行呼叫 `settingsGetToolList()` + `settingsGetPermissions()`，渲染全部 tools（name + description + Allow/Ask/Deny `<select>`）。`onChange` 觸發 optimistic 更新 local state，再呼叫 `settingsSetPermission`；IPC 失敗時 rollback 至舊值。Loading / error fallback 均已實作。`npm run typecheck && npm run build` 全通過。
+
+### Changed Files
+- src/renderer/src/components/Settings.tsx
+
+### Notes
+- AC-1 ~ AC-6 的 runtime 行為需 `npm run dev` 手動確認（Vitest node 環境無法測試 renderer component）
+- 本次 iteration 全部 5 個 tasks 均已完成
+
+## Task 4 - Settings 頁面：Sidebar layout + General 分頁
+
+### Summary
+新建 `src/renderer/src/components/Settings.tsx`，實作 Sidebar layout（左側 General / Permissions 選單 + 返回按鈕，右側內容區）。General 分頁透過 `settingsGetWorkspaceRoot()` 取得路徑並以 monospace 唯讀顯示，含 loading（`…`）與 error（`Unable to load path`）狀態。Permissions 分頁留佔位符。`App.tsx` 將 `SettingsPlaceholder` 替換為正式 `<Settings onBack={...} />`。`npm run typecheck && npm run build` 全通過。
+
+### Changed Files
+- src/renderer/src/components/Settings.tsx
+- src/renderer/src/App.tsx
+
+### Notes
+- `SettingsPlaceholder` 函式已從 `App.tsx` 移除（Task 5 接手實作 Permissions 分頁）
 
 ## Task 3 - App-level navigation：settings phase + gear icon
 
