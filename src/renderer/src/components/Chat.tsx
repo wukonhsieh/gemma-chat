@@ -174,6 +174,10 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
   const [streaming, setStreaming] = useState(false)
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
 
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchOpenRef = useRef(false)
+
   const activeProject = useMemo(
     () => projects.find((p) => p.id === activeProjectId),
     [projects, activeProjectId]
@@ -199,6 +203,32 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
       conversations[0],
     [conversations, visibleConversations, activeId]
   )
+
+  useEffect(() => {
+    searchOpenRef.current = searchOpen
+  }, [searchOpen])
+
+  const closeSearch = useCallback((): void => {
+    setSearchOpen(false)
+    setSearchQuery('')
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault()
+        if (searchOpenRef.current) {
+          closeSearch()
+        } else {
+          setSearchOpen(true)
+        }
+      } else if (e.key === 'Escape') {
+        closeSearch()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [closeSearch])
 
   useEffect(() => {
     saveChatState(chatState)
@@ -517,7 +547,7 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
         onOpenSettings={onOpenSettings}
       />
       <div className="flex min-w-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative flex min-w-0 flex-1 flex-col">
           <Header
             model={model}
             mode={activeConversation.mode}
@@ -526,6 +556,13 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
             onToggleCanvas={toggleCanvas}
             onSwitchModel={onSwitchModel}
           />
+          {searchOpen && (
+            <SearchBar
+              query={searchQuery}
+              onChange={setSearchQuery}
+              onClose={closeSearch}
+            />
+          )}
           <MessageList
             messages={activeConversation.messages}
             streaming={streaming}
@@ -873,6 +910,55 @@ function EmptyState({ mode }: { mode: AgentMode }) {
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+function SearchBar({
+  query,
+  onChange,
+  onClose
+}: {
+  query: string
+  onChange: (q: string) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="absolute right-4 top-11 z-50 flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-ink-950/95 px-3 py-2 shadow-2xl backdrop-blur-sm">
+      <input
+        autoFocus
+        type="text"
+        value={query}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search…"
+        className="w-44 bg-transparent text-[13px] text-white placeholder-ink-400 outline-none"
+      />
+      <span className="min-w-[2rem] text-center text-[11px] text-ink-400">—</span>
+      <button
+        disabled
+        className="flex h-6 w-6 items-center justify-center rounded-md text-ink-400 opacity-30"
+      >
+        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 10l4-4 4 4" />
+        </svg>
+      </button>
+      <button
+        disabled
+        className="flex h-6 w-6 items-center justify-center rounded-md text-ink-400 opacity-30"
+      >
+        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 6l4 4 4-4" />
+        </svg>
+      </button>
+      <div className="mx-0.5 h-4 w-px bg-white/10" />
+      <button
+        onClick={onClose}
+        className="flex h-6 w-6 items-center justify-center rounded-md text-ink-400 transition hover:bg-white/10 hover:text-white"
+      >
+        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M4 4l8 8M12 4L4 12" />
+        </svg>
+      </button>
     </div>
   )
 }
