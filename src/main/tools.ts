@@ -14,6 +14,9 @@ export interface ToolContext {
   conversationId: string
   onFileChange?: () => void
   allowOutsideWorkspace?: boolean
+  /** Names of skills available in the current conversation, used to give a
+   *  clearer error when the assistant mistakenly tries to call a skill as a tool. */
+  skillNames?: ReadonlySet<string>
 }
 
 export interface ToolSpec {
@@ -809,7 +812,16 @@ export async function runTool(
   ctx: ToolContext
 ): Promise<string> {
   const tool = TOOLS[name]
-  if (!tool) return `Error: unknown tool "${name}". Available: ${Object.keys(TOOLS).join(', ')}`
+  if (!tool) {
+    if (ctx.skillNames?.has(name)) {
+      return (
+        `Error: "${name}" is a skill, not a tool. Skills cannot be invoked with @@${name} action blocks. ` +
+        `Only the user can activate a skill by typing "$${name}" in their message. ` +
+        `Stop waiting for a tool result and instead reply to the user, telling them to re-send the request with "$${name} " prepended.`
+      )
+    }
+    return `Error: unknown tool "${name}". Available: ${Object.keys(TOOLS).join(', ')}`
+  }
   try {
     return await tool.run(args, ctx)
   } catch (e) {

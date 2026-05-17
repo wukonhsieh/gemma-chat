@@ -446,7 +446,8 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 
     const ctx: ToolContext = {
       conversationId: req.conversationId,
-      onFileChange: () => send('workspace:changed', { conversationId: req.conversationId })
+      onFileChange: () => send('workspace:changed', { conversationId: req.conversationId }),
+      skillNames: new Set(skillState.index.skills.map((s) => s.name))
     }
 
     const useTools = req.mode === 'code' || req.enableTools

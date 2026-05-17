@@ -18,10 +18,12 @@ function catalogLines(
   }
   lines.push('')
   lines.push('rules:')
-  lines.push('  - Use a skill only if the user request clearly matches its summary or triggers.')
+  lines.push('  - Skills are activated ONLY by the user typing "$skill-name" in their message.')
+  lines.push('  - You (the assistant) CANNOT activate a skill yourself. There is no tool for invoking skills.')
+  lines.push('  - DO NOT emit "@@skill-name" action blocks for any skill listed above — these are not tools and will fail.')
+  lines.push('  - If the user request clearly matches a skill\'s summary or triggers, tell the user to re-send the same request with "$skill-name " prepended (e.g. "$gen-pptx ...").')
+  lines.push('  - If no skill matches, ignore this list and answer normally.')
   lines.push('  - Do not invent skill names.')
-  lines.push('  - If no skill matches, use no skill.')
-  lines.push('  - Hidden skills may exist but are not available for model invocation.')
   return lines.join('\n')
 }
 
