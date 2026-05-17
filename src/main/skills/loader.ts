@@ -129,6 +129,25 @@ export async function loadSkill(
     `    2. You hit a real error you cannot work around (a tool returned an unrecoverable error, ` +
     `a required file is missing, etc.). Say plainly what failed.\n` +
     `  In either case, state the reason clearly. Do not fabricate progress.\n\n` +
+    `RUNNING SHELL COMMANDS FROM THE PROCEDURE\n` +
+    `Code fences in the procedure (e.g. \`\`\`bash ... \`\`\`) are DOCUMENTATION. ` +
+    `Writing them out in your reply does NOT execute them. To actually run a command you MUST ` +
+    `emit a run_bash action block.\n\n` +
+    `WRONG (these lines do nothing — the system ignores them):\n` +
+    `  $${skillName} render slides.json --output deck.pptx\n` +
+    `  \`\`\`bash\n` +
+    `  npm run render -- input.slides.json output.pptx\n` +
+    `  \`\`\`\n` +
+    `  Generating the final PowerPoint file...\n\n` +
+    `RIGHT (emits a real shell action):\n` +
+    `  @@run_bash\n` +
+    `  command <<CMD\n` +
+    `  cd ${skillDir} && npm run render -- slides.json output/deck.pptx\n` +
+    `  CMD\n` +
+    `  @@end\n\n` +
+    `The "$" prefix appears ONLY in messages the user types to load a skill. ` +
+    `You (the assistant) must NEVER write a line starting with "$" as if it were a command — ` +
+    `it has no execution effect. All execution goes through @@<tool_name> action blocks.\n\n` +
     `You MUST follow the procedure below. It overrides your default behavior for this turn ` +
     `and for any subsequent turns until the procedure is complete.\n\n`
   return { ok: true, skillName, content: header + skillContent }
