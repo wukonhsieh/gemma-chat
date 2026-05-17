@@ -6,6 +6,7 @@ import {
   wsRunBash,
   ensureWorkspace,
   listTree,
+  findFiles,
   previewUrl
 } from './workspace'
 
@@ -257,6 +258,23 @@ async function listFiles(
     .join('\n')
 }
 
+async function findFile(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
+  const pattern = String(args.pattern ?? '').trim()
+  if (!pattern) return 'Error: missing <pattern>'
+  const rawLimit = typeof args.limit === 'number' ? args.limit : Number(args.limit)
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 500) : 50
+  const includeHidden = args.include_hidden === true || args.include_hidden === 'true'
+  const includeIgnored = args.include_ignored === true || args.include_ignored === 'true'
+  const base = await ensureWorkspace(ctx.conversationId)
+  const r = await findFiles(base, { pattern, limit, includeHidden, includeIgnored })
+  if (r.matches.length === 0) return `(no files matching "${pattern}")`
+  const lines = [...r.matches]
+  if (r.truncated) {
+    lines.push(`... (truncated, ${r.total - r.matches.length} more match${r.total - r.matches.length === 1 ? '' : 'es'}; refine pattern or raise limit)`)
+  }
+  return lines.join('\n')
+}
+
 async function deleteFile(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const path = String(args.path ?? '').trim()
   if (!path) return 'Error: missing <path>'
@@ -362,6 +380,20 @@ export const TOOLS: Record<string, ToolSpec> = {
     example: '@@list_files\n@@end',
     mode: 'code',
     run: listFiles
+  },
+  find_file: {
+    name: 'find_file',
+    description:
+      'Find files by name. Pattern accepts globs (*, **, ?) or a plain substring (case-insensitive). Skips hidden files and common build dirs (node_modules, dist, build, out, .git, ...) by default.',
+    params: [
+      { name: 'pattern', description: 'glob (e.g. "**/*.ts") or substring (e.g. "Button")', required: true },
+      { name: 'limit', description: 'max results (default 50, max 500)' },
+      { name: 'include_hidden', description: 'true to include dotfiles/dotdirs' },
+      { name: 'include_ignored', description: 'true to include node_modules, dist, build, etc.' }
+    ],
+    example: '@@find_file\npattern: **/*.tsx\n@@end',
+    mode: 'code',
+    run: findFile
   },
   delete_file: {
     name: 'delete_file',

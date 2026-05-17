@@ -336,6 +336,96 @@ export async function listTree(base: string, max = 200): Promise<FileEntry[]> {
   return out
 }
 
+export const DEFAULT_IGNORE_DIRS = [
+  'node_modules',
+  'dist',
+  'build',
+  'out',
+  '.git',
+  '.next',
+  '.cache',
+  '.turbo',
+  'coverage'
+]
+
+function globToRegex(glob: string): RegExp {
+  let re = ''
+  let i = 0
+  while (i < glob.length) {
+    const c = glob[i]
+    if (c === '*') {
+      if (glob[i + 1] === '*') {
+        re += '.*'
+        i += 2
+        if (glob[i] === '/') i++
+      } else {
+        re += '[^/]*'
+        i++
+      }
+    } else if (c === '?') {
+      re += '[^/]'
+      i++
+    } else if ('.+^$()|{}[]\\'.includes(c)) {
+      re += '\\' + c
+      i++
+    } else {
+      re += c
+      i++
+    }
+  }
+  return new RegExp('^' + re + '$', 'i')
+}
+
+export interface FindFilesOptions {
+  pattern: string
+  limit?: number
+  includeHidden?: boolean
+  includeIgnored?: boolean
+}
+
+export interface FindFilesResult {
+  matches: string[]
+  truncated: boolean
+  total: number
+}
+
+export async function findFiles(base: string, opts: FindFilesOptions): Promise<FindFilesResult> {
+  const limit = opts.limit ?? 50
+  const includeHidden = opts.includeHidden ?? false
+  const includeIgnored = opts.includeIgnored ?? false
+  const pattern = opts.pattern.trim()
+  const isGlob = /[*?\[\]]/.test(pattern)
+  const matcher = isGlob ? globToRegex(pattern) : null
+  const needle = pattern.toLowerCase()
+  const matches: string[] = []
+  let total = 0
+
+  async function walk(dir: string, prefix: string): Promise<void> {
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      if (!includeHidden && e.name.startsWith('.')) continue
+      if (!includeIgnored && e.isDirectory() && DEFAULT_IGNORE_DIRS.includes(e.name)) continue
+      const p = prefix ? `${prefix}/${e.name}` : e.name
+      if (e.isDirectory()) {
+        await walk(join(dir, e.name), p)
+      } else {
+        const hit = matcher ? matcher.test(p) || matcher.test(e.name) : p.toLowerCase().includes(needle)
+        if (hit) {
+          total++
+          if (matches.length < limit) matches.push(p)
+        }
+      }
+    }
+  }
+  await walk(base, '')
+  return { matches, truncated: total > matches.length, total }
+}
+
 export async function wsWriteFile(
   conversationId: string,
   path: string,
