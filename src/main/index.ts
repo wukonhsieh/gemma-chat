@@ -41,6 +41,7 @@ import {
   type ToolPermissionPolicy,
   type ToolPermissionEvaluation
 } from './permissions'
+import { LOOP_WINDOW, CYCLE_REPEATS, toolFingerprint, detectToolLoop } from './toolLoopGuard'
 import { scanAllSkills, type ScopeEntry } from './skills/scanner'
 import { writeSkillArtifacts, buildSkillCatalogFromIndex } from './skills/indexer'
 import { detectSkillInvocation } from './skills/detector'
@@ -163,8 +164,8 @@ async function handleSetup(model: string): Promise<void> {
   }
 }
 
-const MAX_TOOL_ROUNDS_CHAT = 6
-const MAX_TOOL_ROUNDS_CODE = 40
+const MAX_TOOL_ROUNDS_CHAT = 12
+const MAX_TOOL_ROUNDS_CODE = 80
 
 const PATH_PERMISSION_TOOLS = new Set(['write_file', 'read_file', 'edit_file', 'delete_file'])
 
@@ -431,6 +432,9 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
     const maxRounds = req.mode === 'code' ? MAX_TOOL_ROUNDS_CODE : MAX_TOOL_ROUNDS_CHAT
 
     emit({ type: 'activity', activity: { kind: 'thinking', chars: 0 } })
+
+    const toolHistory: string[] = []
+    let loopNudgeIssued = false
 
     for (let round = 0; round < maxRounds; round++) {
       let buffer = ''
@@ -705,6 +709,28 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
               content: `=== tool_result name=${found.name} status=${hadError ? 'error' : 'ok'} ===\n${result}\n=== end ===`
             })
             executedAction = true
+
+            toolHistory.push(toolFingerprint(found.name, found.args))
+            if (toolHistory.length > LOOP_WINDOW) toolHistory.shift()
+            const loop = detectToolLoop(toolHistory)
+            if (loop) {
+              if (!loopNudgeIssued) {
+                loopNudgeIssued = true
+                baseMessages.push({
+                  role: 'user',
+                  content: `=== system_notice ===\nDetected a repeating tool-call pattern (cycle length ${loop.k}, repeated ${CYCLE_REPEATS} times). Stop repeating the same actions. Either change your approach, or finish the turn with a final answer instead of calling another tool.\n=== end ===`
+                })
+                // Reset history so the nudge gets a fresh window to judge.
+                toolHistory.length = 0
+              } else {
+                emit({ type: 'activity', activity: { kind: 'idle' } })
+                emit({
+                  type: 'error',
+                  error: `Aborted: tool calls kept looping (cycle length ${loop.k}) even after a nudge to change approach.`
+                })
+                return
+              }
+            }
             if (livePath) {
               send('file:streaming', {
                 conversationId: req.conversationId,
