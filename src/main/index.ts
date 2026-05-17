@@ -336,24 +336,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
           ? join(app.getAppPath(), 'resources', 'skills')
           : join(process.resourcesPath, 'skills')
 
-        const scopes: ScopeEntry[] = []
-        if (req.workspacePath) {
-          scopes.push({
-            scope: 'project',
-            root: join(req.workspacePath, '.agents', 'skills'),
-            cacheRoot: join(req.workspacePath, '.agents', 'cache')
-          })
-        }
-        scopes.push({
-          scope: 'global',
-          root: join(homeDir, '.agents', 'skills'),
-          cacheRoot: join(homeDir, '.agents', 'cache')
-        })
-        scopes.push({
-          scope: 'builtin',
-          root: builtinRoot,
-          cacheRoot: join(userDataDir, '.agents', 'cache', 'builtin')
-        })
+        const scopes = buildSkillScopes(req.workspacePath, homeDir, userDataDir, builtinRoot)
 
         const artifactRoot = req.workspacePath ?? userDataDir
         const lock = await scanAllSkills(scopes)
@@ -811,6 +794,33 @@ interface ConversationSkillState {
 }
 const conversationSkillStates = new Map<string, ConversationSkillState>()
 
+function buildSkillScopes(
+  workspacePath: string | undefined,
+  homeDir: string,
+  userDataDir: string,
+  builtinRoot: string
+): ScopeEntry[] {
+  const scopes: ScopeEntry[] = []
+  if (workspacePath) {
+    scopes.push({
+      scope: 'project',
+      root: join(workspacePath, '.agents', 'skills'),
+      cacheRoot: join(workspacePath, '.agents', 'cache')
+    })
+  }
+  scopes.push({
+    scope: 'global',
+    root: join(homeDir, '.agents', 'skills'),
+    cacheRoot: join(homeDir, '.agents', 'cache')
+  })
+  scopes.push({
+    scope: 'builtin',
+    root: builtinRoot,
+    cacheRoot: join(userDataDir, '.agents', 'cache', 'builtin')
+  })
+  return scopes
+}
+
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.ammaar.gemmachat')
   nativeTheme.themeSource = 'dark'
@@ -932,12 +942,45 @@ app.whenReady().then(async () => {
 
   ipcMain.handle(
     SETTINGS_CHANNELS.GET_SYSTEM_PROMPT,
-    async (_e, { mode, projectPath }: { mode: string; projectPath?: string }): Promise<string> => {
-      if (mode === 'code') {
-        const wsPath = projectPath ?? workspacesRoot()
-        return codeSystemPrompt(wsPath, '')
+    async (
+      _e,
+      {
+        mode,
+        projectPath,
+        conversationId,
+        enableTools
+      }: { mode: string; projectPath?: string; conversationId?: string; enableTools?: boolean }
+    ): Promise<string> => {
+      const basePrompt =
+        mode === 'code'
+          ? codeSystemPrompt(
+              projectPath ?? workspacesRoot(),
+              conversationId ? previewUrl(conversationId) : ''
+            )
+          : chatSystemPrompt(enableTools ?? true)
+
+      let skillCatalog = ''
+      try {
+        const homeDir = app.getPath('home')
+        const userDataDir = app.getPath('userData')
+        const builtinRoot = is.dev
+          ? join(app.getAppPath(), 'resources', 'skills')
+          : join(process.resourcesPath, 'skills')
+        const scopes = buildSkillScopes(projectPath, homeDir, userDataDir, builtinRoot)
+        const artifactRoot = projectPath ?? userDataDir
+        console.log('[settings preview] projectPath:', projectPath, 'scopes:', scopes.map((s) => `${s.scope}:${s.root}`))
+        const lock = await scanAllSkills(scopes)
+        const { index } = await writeSkillArtifacts(artifactRoot, lock)
+        const invocableCount = index.skills.filter((s) => s.modelInvocable).length
+        console.log('[settings preview] skills found:', index.skills.length, 'modelInvocable:', invocableCount)
+        if (invocableCount > 0) {
+          skillCatalog = buildSkillCatalogFromIndex(index)
+        }
+      } catch (err) {
+        console.log('[settings preview] scan failed:', err)
       }
-      return chatSystemPrompt(true)
+
+      return skillCatalog ? `${basePrompt}\n\n${skillCatalog}` : basePrompt
     }
   )
 

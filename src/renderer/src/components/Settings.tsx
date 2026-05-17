@@ -230,7 +230,7 @@ function GeneralTab() {
       setContextText('')
       return
     }
-    window.api.settingsGetSystemPrompt(conversation.mode, conversation.projectPath)
+    window.api.settingsGetSystemPrompt(conversation.mode, conversation.projectPath, conversation.id, true)
       .then((sysPrompt) => {
         setContextText(formatContext(sysPrompt, conversation.messages))
       })
