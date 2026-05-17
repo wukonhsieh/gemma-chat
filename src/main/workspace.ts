@@ -98,7 +98,7 @@ export function classifyPathAgainstWorkspace(
   }
 }
 
-function isResolvedPathInside(workspaceRoot: string, resolvedPath: string): boolean {
+export function isResolvedPathInside(workspaceRoot: string, resolvedPath: string): boolean {
   const root = resolve(workspaceRoot)
   const rel = relative(root, resolvedPath)
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel) && !rel.includes('..' + sep))

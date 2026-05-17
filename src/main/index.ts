@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, nativeTheme, session, nativeImage, dialog } from 'electron'
-import { join } from 'path'
+import { dirname, join, resolve } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { AVAILABLE_MODELS } from '@shared/types'
 import {
@@ -32,7 +32,8 @@ import {
   workspacesRoot,
   wsWriteFile,
   registerConversationWorkspace,
-  classifyWorkspacePath
+  classifyWorkspacePath,
+  isResolvedPathInside
 } from './workspace'
 import {
   evaluateToolPermission,
@@ -171,6 +172,32 @@ const PATH_PERMISSION_TOOLS = new Set(['write_file', 'read_file', 'edit_file', '
 
 interface ActionPermissionEvaluation extends ToolPermissionEvaluation {
   allowOutsideWorkspaceOnApproval?: boolean
+  autoAllowOutsideWorkspace?: boolean
+}
+
+// Skill folders activated during this conversation. Reads under these
+// directories bypass the "outside workspace" permission prompt because
+// the user explicitly invoked the skill — re-prompting per file would
+// just churn through prompts the user already said yes to in spirit.
+const conversationAllowedSkillDirs = new Map<string, Set<string>>()
+
+function registerAllowedSkillDir(conversationId: string, skillDir: string): void {
+  const normalized = resolve(skillDir)
+  let set = conversationAllowedSkillDirs.get(conversationId)
+  if (!set) {
+    set = new Set()
+    conversationAllowedSkillDirs.set(conversationId, set)
+  }
+  set.add(normalized)
+}
+
+function isPathInsideActivatedSkillDir(conversationId: string, resolvedPath: string): boolean {
+  const set = conversationAllowedSkillDirs.get(conversationId)
+  if (!set || set.size === 0) return false
+  for (const dir of set) {
+    if (isResolvedPathInside(dir, resolvedPath)) return true
+  }
+  return false
 }
 
 interface PendingToolPermission {
@@ -200,6 +227,13 @@ function evaluateActionPermission(
   if (PATH_PERMISSION_TOOLS.has(toolName) && typeof args.path === 'string') {
     const pathCheck = classifyWorkspacePath(req.conversationId, args.path)
     if (pathCheck.requiresAsk) {
+      if (isPathInsideActivatedSkillDir(req.conversationId, pathCheck.resolvedPath)) {
+        return {
+          mode: 'allow',
+          reason: 'Path is inside a skill folder activated in this conversation.',
+          autoAllowOutsideWorkspace: true
+        }
+      }
       return {
         mode: 'ask',
         reason: `${pathCheck.reason} Approval is required to access ${pathCheck.resolvedPath}.`,
@@ -377,6 +411,10 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
         )
         if (result.ok) {
           skillInjection = result.content
+          const loadedEntry = skillState.index.skills.find((s) => s.name === skillName)
+          if (loadedEntry) {
+            registerAllowedSkillDir(req.conversationId, dirname(loadedEntry.path))
+          }
         } else {
           skillError = result.reason
         }
@@ -636,13 +674,13 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
             let result = ''
             let hadError = false
             let shouldRunTool = true
-            let allowOutsideWorkspace = false
             const permission = evaluateActionPermission(
               req,
               toolPermissionPolicy,
               found.name,
               found.args
             )
+            let allowOutsideWorkspace = permission.autoAllowOutsideWorkspace === true
             if (permission.mode === 'deny') {
               result = `Permission denied for ${found.name}: ${permission.reason}`
               hadError = true
