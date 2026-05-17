@@ -150,5 +150,24 @@ export async function loadSkill(
     `it has no execution effect. All execution goes through @@<tool_name> action blocks.\n\n` +
     `You MUST follow the procedure below. It overrides your default behavior for this turn ` +
     `and for any subsequent turns until the procedure is complete.\n\n`
-  return { ok: true, skillName, content: header + skillContent }
+
+  const footer =
+    `\n\n` +
+    `=== FINAL CHECK BEFORE YOU REPLY (skill: ${skillName}) ===\n` +
+    `Before sending each response, verify:\n` +
+    `1. If the procedure above tells you to run a specific command (e.g. "npm run X", ` +
+    `"python scripts/Y.py"), use THAT EXACT command in a @@run_bash action. Do not ` +
+    `substitute a different language (e.g. do not run Python when the procedure says npm). ` +
+    `Do not invent your own command equivalent.\n` +
+    `2. If the skill folder already contains a script, renderer, or generator that does the ` +
+    `job (look at the file list at the top of this message), USE IT via @@run_bash. Do NOT ` +
+    `write your own replacement script with write_file. The skill author wrote those files ` +
+    `specifically so you would not have to reimplement them.\n` +
+    `3. Did you actually emit @@<tool_name> action blocks for every step that requires real ` +
+    `execution? Text in your reply that describes a command (even in a code fence) does ` +
+    `nothing on its own.\n` +
+    `4. Are you about to claim success? Only do so if a tool_result confirms the deliverable ` +
+    `was produced. Never claim success based on what you intended to do.\n`
+
+  return { ok: true, skillName, content: header + skillContent + footer }
 }
