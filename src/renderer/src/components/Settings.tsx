@@ -1,5 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { AgentMode, ToolCall, ToolInfo, ToolPermissionValue } from '@shared/types'
+import { useEffect, useState } from 'react'
+import type {
+  ChatMessage,
+  Conversation,
+  ToolInfo,
+  ToolPermissionValue
+} from '@shared/types'
 
 type SettingsTab = 'general' | 'permissions'
 
@@ -152,44 +157,9 @@ function PermissionsTab() {
   )
 }
 
-const STATE_KEY = 'gabie:state:v3'
 const ACTIVE_ID_KEY = 'gabie:active-id'
 
-interface StoredMessage {
-  id: string
-  role: string
-  content: string
-  toolCalls?: ToolCall[]
-}
-
-interface StoredConversation {
-  id: string
-  mode: AgentMode
-  projectPath?: string
-  messages: StoredMessage[]
-}
-
-interface StoredChatState {
-  conversations: StoredConversation[]
-  activeProjectId: string | null
-}
-
-function loadActiveConversation(): StoredConversation | null {
-  try {
-    const raw = localStorage.getItem(STATE_KEY)
-    if (!raw) return null
-    const state = JSON.parse(raw) as StoredChatState
-    const activeId = localStorage.getItem(ACTIVE_ID_KEY)
-    const conv = activeId
-      ? (state.conversations.find((c) => c.id === activeId) ?? state.conversations[0])
-      : state.conversations[0]
-    return conv ?? null
-  } catch {
-    return null
-  }
-}
-
-function formatContext(systemPrompt: string, messages: StoredMessage[]): string {
+function formatContext(systemPrompt: string, messages: ChatMessage[]): string {
   const parts: string[] = []
   parts.push('[system]:')
   parts.push(systemPrompt)
@@ -199,11 +169,10 @@ function formatContext(systemPrompt: string, messages: StoredMessage[]): string 
     parts.push(m.content)
     if (m.toolCalls) {
       for (const tc of m.toolCalls) {
-        const result = (tc as ToolCall & { result?: string }).result
-        if (result != null) {
+        if (tc.result != null) {
           parts.push('')
           parts.push(`[tool_result: ${tc.name}]:`)
-          parts.push(result)
+          parts.push(tc.result)
         }
       }
     }
@@ -216,8 +185,8 @@ function GeneralTab() {
   const [error, setError] = useState(false)
   const [contextText, setContextText] = useState<string | null>(null)
   const [contextError, setContextError] = useState(false)
-
-  const conversation = useMemo(() => loadActiveConversation(), [])
+  const [conversation, setConversation] = useState<Conversation | null>(null)
+  const [conversationLoaded, setConversationLoaded] = useState(false)
 
   useEffect(() => {
     window.api.settingsGetWorkspaceRoot()
@@ -225,17 +194,46 @@ function GeneralTab() {
       .catch(() => setError(true))
   }, [])
 
+  // Source of truth for ChatState is <userData>/chat-state.json since
+  // issue 000022; we fetch via IPC instead of reading localStorage.
+  // ACTIVE_ID_KEY (just the active conversation id string) still lives
+  // in localStorage and is fine to read synchronously.
   useEffect(() => {
+    let cancelled = false
+    window.api
+      .loadChatState()
+      .then((state) => {
+        if (cancelled) return
+        const activeId = localStorage.getItem(ACTIVE_ID_KEY)
+        const conv =
+          (activeId ? state.conversations.find((c) => c.id === activeId) : undefined) ??
+          state.conversations[0] ??
+          null
+        setConversation(conv)
+        setConversationLoaded(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setConversationLoaded(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!conversationLoaded) return
     if (!conversation) {
       setContextText('')
       return
     }
-    window.api.settingsGetSystemPrompt(conversation.mode, conversation.projectPath, conversation.id, true)
+    window.api
+      .settingsGetSystemPrompt(conversation.mode, conversation.projectPath, conversation.id, true)
       .then((sysPrompt) => {
         setContextText(formatContext(sysPrompt, conversation.messages))
       })
       .catch(() => setContextError(true))
-  }, [conversation])
+  }, [conversation, conversationLoaded])
 
   const msgCount = conversation?.messages.length ?? 0
 
