@@ -1,4 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, nativeTheme, session, nativeImage, dialog } from 'electron'
+import { stat } from 'fs/promises'
 import { dirname, join, resolve } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { AVAILABLE_MODELS } from '@shared/types'
@@ -198,6 +199,45 @@ function isPathInsideActivatedSkillDir(conversationId: string, resolvedPath: str
     if (isResolvedPathInside(dir, resolvedPath)) return true
   }
   return false
+}
+
+function isSkillActiveForConversation(conversationId: string): boolean {
+  const set = conversationAllowedSkillDirs.get(conversationId)
+  return !!set && set.size > 0
+}
+
+// Verbs that signal the assistant is claiming a deliverable exists.
+const SUCCESS_CLAIM_PATTERN =
+  /\b(generated|created|saved|written|produced|rendered|exported|completed|complete|finished|ready|available|successful(?:ly)?)\b/i
+
+// File-path-shaped tokens with a known extension. Restricted to common output
+// types to keep false-positive surface area small.
+const CLAIMED_FILE_PATTERN =
+  /(?<![\w@])([\w./-]+\.(?:pptx|ppt|pdf|docx|doc|xlsx|xls|csv|md|json|html?|svg|png|jpe?g|gif|mp[34]|zip|tar|gz|txt|log|yaml|yml))\b/gi
+
+async function findFabricatedFileClaims(
+  text: string,
+  conversationId: string
+): Promise<string[]> {
+  if (!SUCCESS_CLAIM_PATTERN.test(text)) return []
+  const wsDir = workspaceDir(conversationId)
+  const candidates = new Set<string>()
+  for (const match of text.matchAll(CLAIMED_FILE_PATTERN)) {
+    const p = match[1].replace(/[)\].,;:!?'"`]+$/, '').trim()
+    if (!p) continue
+    if (/^https?:\/\//i.test(p) || p.startsWith('www.')) continue
+    candidates.add(p)
+  }
+  const missing: string[] = []
+  for (const p of candidates) {
+    const target = p.startsWith('/') ? p : resolve(wsDir, p)
+    try {
+      await stat(target)
+    } catch {
+      missing.push(p)
+    }
+  }
+  return missing
 }
 
 interface PendingToolPermission {
@@ -457,6 +497,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 
     const toolHistory: string[] = []
     let loopNudgeIssued = false
+    let verificationNudgeIssued = false
 
     for (let round = 0; round < maxRounds; round++) {
       let buffer = ''
@@ -778,6 +819,37 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       }
 
       if (!executedAction) {
+        // Skill-active fabrication guard: if the model claims a deliverable file
+        // exists but no such file is in the workspace, push a verification-failed
+        // message and let it retry instead of ending the turn on a lie.
+        if (
+          !verificationNudgeIssued &&
+          isSkillActiveForConversation(req.conversationId) &&
+          buffer.trim().length > 0
+        ) {
+          const missing = await findFabricatedFileClaims(buffer, req.conversationId)
+          if (missing.length > 0) {
+            if (emittedIdx < buffer.length) {
+              emit({ type: 'token', text: buffer.slice(emittedIdx) })
+            }
+            baseMessages.push({ role: 'assistant', content: buffer })
+            baseMessages.push({
+              role: 'user',
+              content:
+                `VERIFICATION FAILED: You claimed the following file(s) exist or were produced, ` +
+                `but the filesystem shows they do not exist:\n` +
+                missing.map((p) => `  - ${p}`).join('\n') +
+                `\n\nYou did not emit any actions this turn that would create these files. ` +
+                `Do not fabricate progress. Either emit the actual @@run_bash or @@write_file ` +
+                `action now to produce them, or state plainly what is blocking you (missing ` +
+                `dependency, ambiguous step, etc.). Do not repeat the success claim.`
+            })
+            verificationNudgeIssued = true
+            emit({ type: 'activity', activity: { kind: 'thinking', chars: 0 } })
+            continue
+          }
+        }
+
         // In Build mode, if the model just described a plan without writing code,
         // nudge it to start coding immediately instead of ending the turn.
         if (
