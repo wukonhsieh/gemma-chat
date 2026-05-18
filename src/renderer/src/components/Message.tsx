@@ -7,7 +7,8 @@ import type {
   ToolPermissionResponseDecision
 } from '@shared/types'
 import gemmaLogoUrl from '../assets/gabie-smile.png'
-import { highlightHtml } from '../lib/highlight'
+import { countMatches, highlightHtml } from '../lib/highlight'
+import { parseSkillInjection } from '../lib/skill-injection'
 
 interface Props {
   message: ChatMessage
@@ -83,6 +84,31 @@ export default function Message({ message, streaming, onRegenerate, searchQuery,
   }, [parsed.visible])
 
   if (isUser) {
+    const skillInjection = parseSkillInjection(message.content)
+    if (skillInjection) {
+      const injectionMatches = searchQuery
+        ? countMatches(skillInjection.injectionContent, searchQuery)
+        : 0
+      const userTextOffset = (matchOffset ?? 0) + injectionMatches
+      return (
+        <div className="flex justify-end">
+          <div className="selectable max-w-[78%] rounded-2xl rounded-br-md bg-white/[0.08] px-4 py-2.5 text-[14.5px] leading-relaxed text-white">
+            <SkillInjectionBlock
+              skillName={skillInjection.skillName}
+              content={skillInjection.injectionContent}
+              searchQuery={searchQuery}
+              matchOffset={matchOffset ?? 0}
+              activeMatchIndex={activeMatchIndex}
+            />
+            <div className="whitespace-pre-wrap">
+              {searchQuery
+                ? highlightText(skillInjection.userText, searchQuery, userTextOffset, activeMatchIndex)
+                : skillInjection.userText}
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex justify-end">
         <div className="selectable max-w-[78%] rounded-2xl rounded-br-md bg-white/[0.08] px-4 py-2.5 text-[14.5px] leading-relaxed text-white">
@@ -268,6 +294,50 @@ function formatElapsed(sec: number): string {
   const m = Math.floor(sec / 60)
   const s = sec % 60
   return `${m}m ${s}s`
+}
+
+function SkillInjectionBlock({
+  skillName,
+  content,
+  searchQuery,
+  matchOffset,
+  activeMatchIndex
+}: {
+  skillName: string
+  content: string
+  searchQuery?: string
+  matchOffset: number
+  activeMatchIndex?: number
+}) {
+  const [userOpen, setUserOpen] = useState(false)
+  // Auto-expand whenever a search query is active so hits inside the
+  // injection are reachable via match-index navigation.
+  const open = userOpen || !!searchQuery
+  return (
+    <div className="mb-2 overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]">
+      <button
+        onClick={() => setUserOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11.5px] text-ink-300 hover:bg-white/[0.04]"
+      >
+        <svg
+          viewBox="0 0 12 12"
+          className={`h-2.5 w-2.5 transition ${open ? 'rotate-90' : ''}`}
+          fill="currentColor"
+        >
+          <path d="M4 2l4 4-4 4V2z" />
+        </svg>
+        <span className="font-mono text-ink-200">${skillName}</span>
+        <span className="text-ink-400">skill procedure loaded</span>
+      </button>
+      {open && (
+        <div className="whitespace-pre-wrap border-t border-white/5 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-ink-300">
+          {searchQuery
+            ? highlightText(content, searchQuery, matchOffset, activeMatchIndex)
+            : content}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function ThinkingBlock({
