@@ -430,7 +430,6 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
     const modelInvocableSkills = skillState.index.skills.filter((s) => s.modelInvocable)
     if (modelInvocableSkills.length > 0) {
       baseMessages.push({ role: 'system', content: buildSkillCatalogFromIndex(skillState.index) })
-      console.log(`>>>> skill index: ${buildSkillCatalogFromIndex(skillState.index)}`);
     }
 
     // Detect explicit skill invocation in the latest user message.
