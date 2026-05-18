@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 import {
   SETTINGS_CHANNELS,
   type ChatRequest,
+  type MessageRewriteEvent,
   type SetupStatus,
   type StreamChunk,
   type ToolInfo,
@@ -68,6 +69,12 @@ const api = {
     const listener = (_: IpcRendererEvent, ev: { conversationId: string }): void => cb(ev)
     ipcRenderer.on('workspace:changed', listener)
     return () => ipcRenderer.removeListener('workspace:changed', listener)
+  },
+
+  onMessageRewrite: (cb: (ev: MessageRewriteEvent) => void): (() => void) => {
+    const listener = (_: IpcRendererEvent, ev: MessageRewriteEvent): void => cb(ev)
+    ipcRenderer.on('chat:rewrite_message', listener)
+    return () => ipcRenderer.removeListener('chat:rewrite_message', listener)
   },
 
   onRawChunk: (

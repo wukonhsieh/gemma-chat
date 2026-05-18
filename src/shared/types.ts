@@ -85,6 +85,12 @@ export interface FileChangeEvent {
   conversationId: string
 }
 
+export interface MessageRewriteEvent {
+  conversationId: string
+  messageIndex: number
+  content: string
+}
+
 export type AgentActivity =
   | { kind: 'idle' }
   | { kind: 'thinking'; chars?: number }

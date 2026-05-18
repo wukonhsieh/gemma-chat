@@ -433,10 +433,18 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
     }
 
     // Detect explicit skill invocation in the latest user message.
-    const lastUserMsg = [...req.messages].reverse().find((m) => m.role === 'user')
+    let lastUserIdx = -1
+    for (let i = req.messages.length - 1; i >= 0; i--) {
+      if (req.messages[i].role === 'user') {
+        lastUserIdx = i
+        break
+      }
+    }
+    const lastUserMsg = lastUserIdx >= 0 ? req.messages[lastUserIdx] : undefined
     let skillInjection: string | null = null
     let skillError: string | null = null
     let strippedLastUserContent: string | null = null
+    let rewrittenLastUserContent: string | null = null
 
     if (lastUserMsg) {
       const { skillName, strippedMessage } = detectSkillInvocation(lastUserMsg.content)
@@ -450,22 +458,29 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
         )
         if (result.ok) {
           skillInjection = result.content
+          rewrittenLastUserContent = skillInjection + '\n\n---\n\n' + strippedLastUserContent
           const loadedEntry = skillState.index.skills.find((s) => s.name === skillName)
           if (loadedEntry) {
             registerAllowedSkillDir(req.conversationId, dirname(loadedEntry.path))
           }
+          // Persist the injected content back to the renderer's conversation history
+          // so subsequent turns still see the full SKILL.md procedure. Without this,
+          // SKILL.md is visible to the model only for the turn it was first triggered.
+          send('chat:rewrite_message', {
+            conversationId: req.conversationId,
+            messageIndex: lastUserIdx,
+            content: rewrittenLastUserContent
+          })
         } else {
           skillError = result.reason
         }
       }
     }
 
-    for (const m of req.messages) {
-      const isLastUser = m === lastUserMsg && strippedLastUserContent !== null
-      let content = isLastUser ? strippedLastUserContent! : m.content
-      if (isLastUser && skillInjection) {
-        content = skillInjection + '\n\n---\n\n' + content
-      }
+    for (let i = 0; i < req.messages.length; i++) {
+      const m = req.messages[i]
+      const isLastUser = i === lastUserIdx && rewrittenLastUserContent !== null
+      const content = isLastUser ? rewrittenLastUserContent! : m.content
       baseMessages.push({ role: m.role as MLXChatMessage['role'], content })
       if (m.toolCalls) {
         for (const tc of m.toolCalls) {

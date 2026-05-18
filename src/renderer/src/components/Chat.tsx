@@ -70,11 +70,26 @@ function loadChatState(): ChatState {
   }
 }
 
+let quotaAlertShown = false
+
 function saveChatState(state: ChatState): void {
   try {
     localStorage.setItem(STATE_KEY, JSON.stringify(state))
-  } catch {
-    // ignore
+  } catch (err) {
+    const isQuota =
+      err instanceof DOMException &&
+      (err.name === 'QuotaExceededError' || err.code === 22 || err.code === 1014)
+    if (isQuota) {
+      console.error('[gabie] localStorage quota exceeded — recent changes were not saved.', err)
+      if (!quotaAlertShown) {
+        quotaAlertShown = true
+        alert(
+          'Local storage is full. Recent chat changes could not be saved and will be lost on refresh. Delete old conversations to free space.'
+        )
+      }
+    } else {
+      console.error('[gabie] saveChatState failed', err)
+    }
   }
 }
 
@@ -236,6 +251,22 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
   useEffect(() => {
     saveChatState(chatState)
   }, [chatState])
+
+  useEffect(() => {
+    const unsubscribe = window.api.onMessageRewrite((ev) => {
+      setChatState((state) => ({
+        ...state,
+        conversations: state.conversations.map((c) => {
+          if (c.id !== ev.conversationId) return c
+          if (ev.messageIndex < 0 || ev.messageIndex >= c.messages.length) return c
+          const messages = c.messages.slice()
+          messages[ev.messageIndex] = { ...messages[ev.messageIndex], content: ev.content }
+          return { ...c, messages }
+        })
+      }))
+    })
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     localStorage.setItem('gabie:active-id', activeId)
