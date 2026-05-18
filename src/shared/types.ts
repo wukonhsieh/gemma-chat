@@ -59,6 +59,24 @@ export interface ProjectRecord {
   lastActivityAt: number
 }
 
+export interface Conversation {
+  id: string
+  title: string
+  messages: ChatMessage[]
+  createdAt: number
+  updatedAt: number
+  mode: AgentMode
+  canvasOpen?: boolean
+  projectId?: string
+  projectPath?: string
+}
+
+export interface ChatState {
+  conversations: Conversation[]
+  projects: ProjectRecord[]
+  activeProjectId: string | null
+}
+
 export interface ChatRequest {
   conversationId: string
   messages: Array<{ role: Role; content: string; toolCalls?: ToolCall[] }>

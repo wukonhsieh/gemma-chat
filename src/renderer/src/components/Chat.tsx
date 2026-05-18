@@ -3,6 +3,8 @@ import {
   AVAILABLE_MODELS,
   type AgentMode,
   type ChatMessage,
+  type ChatState,
+  type Conversation,
   type ProjectRecord,
   type ToolPermissionResponseDecision,
   type ToolCall,
@@ -21,126 +23,10 @@ interface Props {
   onOpenSettings?: () => void
 }
 
-interface Conversation {
-  id: string
-  title: string
-  messages: ChatMessage[]
-  createdAt: number
-  updatedAt: number
-  mode: AgentMode
-  canvasOpen?: boolean
-  projectId?: string
-  projectPath?: string
-}
-
-interface ChatState {
-  conversations: Conversation[]
-  projects: ProjectRecord[]
-  activeProjectId: string | null
-}
-
-const STATE_KEY = 'gabie:state:v3'
-const LEGACY_CONVERSATIONS_KEY = 'gabie:conversations:v2'
-
-function loadChatState(): ChatState {
-  try {
-    const raw = localStorage.getItem(STATE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<ChatState>
-      const projects = normalizeProjects(parsed.projects)
-      const activeProjectId = projects.some((p) => p.id === parsed.activeProjectId)
-        ? parsed.activeProjectId!
-        : projects[0]?.id ?? null
-      return {
-        conversations: normalizeConversations(parsed.conversations),
-        projects,
-        activeProjectId
-      }
-    }
-
-    const legacyRaw = localStorage.getItem(LEGACY_CONVERSATIONS_KEY)
-    if (!legacyRaw) return emptyChatState()
-    return {
-      conversations: normalizeConversations(JSON.parse(legacyRaw) as Conversation[]),
-      projects: [],
-      activeProjectId: null
-    }
-  } catch {
-    return emptyChatState()
-  }
-}
-
-let quotaAlertShown = false
-
-function saveChatState(state: ChatState): void {
-  try {
-    localStorage.setItem(STATE_KEY, JSON.stringify(state))
-  } catch (err) {
-    const isQuota =
-      err instanceof DOMException &&
-      (err.name === 'QuotaExceededError' || err.code === 22 || err.code === 1014)
-    if (isQuota) {
-      console.error('[gabie] localStorage quota exceeded — recent changes were not saved.', err)
-      if (!quotaAlertShown) {
-        quotaAlertShown = true
-        alert(
-          'Local storage is full. Recent chat changes could not be saved and will be lost on refresh. Delete old conversations to free space.'
-        )
-      }
-    } else {
-      console.error('[gabie] saveChatState failed', err)
-    }
-  }
-}
-
-function emptyChatState(): ChatState {
-  return {
-    conversations: [newConversation()],
-    projects: [],
-    activeProjectId: null
-  }
-}
-
-function normalizeConversations(value: unknown): Conversation[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .filter((c): c is Partial<Conversation> => !!c && typeof c === 'object')
-    .map((c) => ({
-      id: typeof c.id === 'string' ? c.id : newId('c'),
-      title: typeof c.title === 'string' ? c.title : 'New chat',
-      messages: Array.isArray(c.messages) ? c.messages : [],
-      createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now(),
-      updatedAt:
-        typeof c.updatedAt === 'number'
-          ? c.updatedAt
-          : typeof c.createdAt === 'number'
-            ? c.createdAt
-            : Date.now(),
-      mode: c.mode ?? 'code',
-      canvasOpen: c.canvasOpen ?? c.mode === 'code',
-      projectId: typeof c.projectId === 'string' ? c.projectId : undefined,
-      projectPath: typeof c.projectPath === 'string' ? c.projectPath : undefined
-    }))
-}
-
-function normalizeProjects(value: unknown): ProjectRecord[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .filter((p): p is Partial<ProjectRecord> => !!p && typeof p === 'object')
-    .filter((p) => typeof p.id === 'string' && typeof p.path === 'string')
-    .map((p) => ({
-      id: p.id!,
-      path: p.path!,
-      name: typeof p.name === 'string' && p.name ? p.name : projectNameFromPath(p.path!),
-      createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
-      lastActivityAt:
-        typeof p.lastActivityAt === 'number'
-          ? p.lastActivityAt
-          : typeof p.createdAt === 'number'
-            ? p.createdAt
-            : Date.now()
-    }))
-}
+// Legacy localStorage key from the pre-fs era. We try to migrate from it on
+// first run and keep a timestamped backup for one grace cycle.
+const LEGACY_STATE_KEY = 'gabie:state:v3'
+const ACTIVE_ID_KEY = 'gabie:active-id'
 
 function newConversation(mode: AgentMode = 'code', project?: ProjectRecord): Conversation {
   const now = Date.now()
@@ -177,16 +63,21 @@ function touchProject(
   )
 }
 
-export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
-  let initialActiveId = ''
-  const [chatState, setChatState] = useState<ChatState>(() => {
-    const loaded = loadChatState()
-    const conversations = loaded.conversations.length ? loaded.conversations : [newConversation()]
-    initialActiveId = conversations[0].id
-    return { ...loaded, conversations }
-  })
+interface ChatInnerProps extends Props {
+  initialChatState: ChatState
+  initialActiveId: string
+}
+
+function ChatInner({
+  model,
+  onSwitchModel,
+  onOpenSettings,
+  initialChatState,
+  initialActiveId
+}: ChatInnerProps) {
+  const [chatState, setChatState] = useState<ChatState>(initialChatState)
   const { conversations, projects, activeProjectId } = chatState
-  const [activeId, setActiveId] = useState<string>(() => initialActiveId)
+  const [activeId, setActiveId] = useState<string>(initialActiveId)
   const [streaming, setStreaming] = useState(false)
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
 
@@ -248,9 +139,44 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [closeSearch])
 
+  // Debounced fs save. Streaming may update chatState many times per second
+  // (one re-render per token), so coalesce into a single write every 1s.
+  // The window flush on unmount/refresh hook below guarantees no data loss
+  // when the user navigates away mid-stream.
+  const saveTimerRef = useRef<number | null>(null)
+  const pendingStateRef = useRef<ChatState>(chatState)
   useEffect(() => {
-    saveChatState(chatState)
+    pendingStateRef.current = chatState
+    if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null
+      window.api
+        .saveChatState(pendingStateRef.current)
+        .catch((e) => console.error('[gabie] saveChatState failed', e))
+    }, 1000)
+    return () => {
+      if (saveTimerRef.current != null) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+    }
   }, [chatState])
+
+  useEffect(() => {
+    // Best-effort flush on tab/window close so the latest debounced state
+    // is persisted even if the user quits before the timer fires.
+    const flush = (): void => {
+      if (saveTimerRef.current != null) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+      window.api
+        .saveChatState(pendingStateRef.current)
+        .catch((e) => console.error('[gabie] saveChatState (unload) failed', e))
+    }
+    window.addEventListener('beforeunload', flush)
+    return () => window.removeEventListener('beforeunload', flush)
+  }, [])
 
   useEffect(() => {
     const unsubscribe = window.api.onMessageRewrite((ev) => {
@@ -269,7 +195,7 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
   }, [])
 
   useEffect(() => {
-    localStorage.setItem('gabie:active-id', activeId)
+    localStorage.setItem(ACTIVE_ID_KEY, activeId)
   }, [activeId])
 
   useEffect(() => {
@@ -674,6 +600,100 @@ export default function Chat({ model, onSwitchModel, onOpenSettings }: Props) {
         )}
       </div>
     </div>
+  )
+}
+
+export default function Chat(props: Props) {
+  const [bootstrap, setBootstrap] = useState<{
+    chatState: ChatState
+    activeId: string
+  } | null>(null)
+  const [bootError, setBootError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        let state = await window.api.loadChatState()
+        // First-run / fresh-install migration from legacy localStorage.
+        // We only migrate when fs is empty so re-running the app doesn't
+        // clobber fs state with a stale backup.
+        if (state.conversations.length === 0 && state.projects.length === 0) {
+          const legacyRaw = localStorage.getItem(LEGACY_STATE_KEY)
+          if (legacyRaw) {
+            try {
+              const legacy = JSON.parse(legacyRaw)
+              const result = await window.api.migrateChatStateFromLegacy(legacy)
+              if (result.migrated) {
+                console.log(
+                  `[gabie] migrated ${result.conversationCount} conversation(s) from localStorage to userData fs`
+                )
+                // Keep a timestamped backup so a worried user can restore
+                // manually; remove the live key so we don't re-migrate.
+                localStorage.setItem(
+                  `${LEGACY_STATE_KEY}-backup-${Date.now()}`,
+                  legacyRaw
+                )
+                localStorage.removeItem(LEGACY_STATE_KEY)
+                state = await window.api.loadChatState()
+              }
+            } catch (e) {
+              console.warn(
+                '[gabie] failed to migrate legacy localStorage; leaving original key untouched',
+                e
+              )
+            }
+          }
+        }
+        if (cancelled) return
+        // Ensure at least one conversation exists for new installs.
+        const conversations = state.conversations.length
+          ? state.conversations
+          : [newConversation()]
+        const stored = localStorage.getItem(ACTIVE_ID_KEY)
+        const activeId =
+          stored && conversations.some((c) => c.id === stored)
+            ? stored
+            : conversations[0].id
+        setBootstrap({ chatState: { ...state, conversations }, activeId })
+      } catch (e) {
+        if (cancelled) return
+        console.error('[gabie] failed to load chat state', e)
+        setBootError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (bootError) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-center text-ink-300">
+        <div>
+          <div className="mb-2 text-[14px] font-semibold text-white">
+            Could not load conversations
+          </div>
+          <div className="text-[12.5px] text-ink-400">{bootError}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!bootstrap) {
+    return (
+      <div className="flex h-full items-center justify-center text-[12.5px] text-ink-400">
+        Loading conversations…
+      </div>
+    )
+  }
+
+  return (
+    <ChatInner
+      {...props}
+      initialChatState={bootstrap.chatState}
+      initialActiveId={bootstrap.activeId}
+    />
   )
 }
 

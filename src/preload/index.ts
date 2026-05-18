@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 import {
   SETTINGS_CHANNELS,
   type ChatRequest,
+  type ChatState,
   type MessageRewriteEvent,
   type SetupStatus,
   type StreamChunk,
@@ -46,6 +47,16 @@ const api = {
 
   abortChat: (conversationId: string): Promise<void> =>
     ipcRenderer.invoke('chat:abort', conversationId),
+
+  loadChatState: (): Promise<ChatState> => ipcRenderer.invoke('chat-state:load'),
+
+  saveChatState: (state: ChatState): Promise<void> =>
+    ipcRenderer.invoke('chat-state:save', state),
+
+  migrateChatStateFromLegacy: (
+    legacy: unknown
+  ): Promise<{ migrated: boolean; conversationCount: number }> =>
+    ipcRenderer.invoke('chat-state:migrate-from-legacy', legacy),
 
   listTools: (): Promise<Array<{ name: string; description: string; mode: string }>> =>
     ipcRenderer.invoke('tools:list'),

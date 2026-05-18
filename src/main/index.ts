@@ -44,6 +44,11 @@ import {
   type ToolPermissionEvaluation
 } from './permissions'
 import { LOOP_WINDOW, CYCLE_REPEATS, toolFingerprint, detectToolLoop } from './toolLoopGuard'
+import {
+  loadChatStateFromDisk,
+  normalizeChatState,
+  saveChatStateToDisk
+} from './conversations'
 import { scanAllSkills, type ScopeEntry } from './skills/scanner'
 import { writeSkillArtifacts, buildSkillCatalogFromIndex } from './skills/indexer'
 import { detectSkillInvocation } from './skills/detector'
@@ -52,6 +57,7 @@ import type { SkillIndex } from './skills/types'
 import {
   SETTINGS_CHANNELS,
   type ChatRequest,
+  type ChatState,
   type StreamChunk,
   type ToolCall,
   type ToolInfo,
@@ -974,6 +980,30 @@ app.whenReady().then(async () => {
   ipcMain.handle('setup:start', async (_e, model: string) => {
     await handleSetup(model)
   })
+
+  ipcMain.handle('chat-state:load', async (): Promise<ChatState> => {
+    return loadChatStateFromDisk(app.getPath('userData'))
+  })
+
+  ipcMain.handle('chat-state:save', async (_e, state: unknown): Promise<void> => {
+    const normalized = normalizeChatState(state)
+    await saveChatStateToDisk(app.getPath('userData'), normalized)
+  })
+
+  ipcMain.handle(
+    'chat-state:migrate-from-legacy',
+    async (_e, legacy: unknown): Promise<{ migrated: boolean; conversationCount: number }> => {
+      const userDataDir = app.getPath('userData')
+      const existing = await loadChatStateFromDisk(userDataDir)
+      if (existing.conversations.length > 0 || existing.projects.length > 0) {
+        // Migration already happened; don't overwrite.
+        return { migrated: false, conversationCount: existing.conversations.length }
+      }
+      const normalized = normalizeChatState(legacy)
+      await saveChatStateToDisk(userDataDir, normalized)
+      return { migrated: true, conversationCount: normalized.conversations.length }
+    }
+  )
 
   ipcMain.handle('model:switch', async (_e, model: string) => {
     const label = AVAILABLE_MODELS.find((m) => m.name === model)?.label ?? model
